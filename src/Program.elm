@@ -48,35 +48,43 @@ type Trace
 
 example : Program
 example =
-    Work "ex before spawn" 2 <| \() ->
-    GetSelfPid <| \pid ->
-    Spawn (childProgram pid) <| \childPid ->
-    Work "ex after spawn" 10 <| \() ->
-    Receive { timeout = Nothing } <| \msg ->
-    case msg of
-        "done" ->
-            Just <|
-                Work "ex after receive" 2 <| \() ->
-                End
+    Work "ex before spawn" 2 <|
+        \() ->
+            GetSelfPid <|
+                \pid ->
+                    Spawn (childProgram pid) <|
+                        \childPid ->
+                            Work "ex after spawn" 10 <|
+                                \() ->
+                                    Receive { timeout = Nothing } <|
+                                        \msg ->
+                                            case msg of
+                                                "done" ->
+                                                    Just <|
+                                                        Work "ex after receive" 2 <|
+                                                            \() ->
+                                                                End
 
-        _ ->
-            Nothing
+                                                _ ->
+                                                    Nothing
 
 
 childProgram : PID -> Program
 childProgram parentPid =
-    Work "child" 20 <| \() ->
-    SendMessage parentPid "done" <| \() ->
-    End
+    Work "child" 20 <|
+        \() ->
+            SendMessage parentPid "done" <|
+                \() ->
+                    End
 
 
 
 -- STEP
 
 
-step : Int -> Program -> ( Program, List Trace )
-step reductionBudget program =
-    step_ reductionBudget [] program
+step : Int -> PID -> Program -> ( Program, List Trace )
+step reductionBudget pid program =
+    step_ reductionBudget pid [] program
 
 
 step_ : Int -> PID -> List Trace -> Program -> ( Program, List Trace )
@@ -85,23 +93,28 @@ step_ reductionBudget pid trace program =
         ( program, trace )
 
     else
+        let
+            recur : Trace -> Program -> ( Program, List Trace )
+            recur newStep newProgram =
+                step_ (reductionBudget - 1) pid (newStep :: trace) newProgram
+        in
         case program of
             Work label amount k ->
                 case compare amount reductionBudget of
                     LT ->
                         -- do this work _and then some_
-                        Debug.todo "step Work LT"
+                        recur (DidWork label amount) (Work label (reductionBudget - amount) k)
 
                     EQ ->
                         -- finish doing this work then yield
-                        Debug.todo "step Work EQ"
+                        recur (DidWork label amount) (k ())
 
                     GT ->
                         -- do only a part of this work
-                        Debug.todo "step Work GT"
+                        recur (DidWork label reductionBudget) (Work label (amount - reductionBudget) k)
 
             GetSelfPid kp ->
-                step_ (reductionBudget - 1) pid (DidGetSelfPid pid :: trace) (kp pid)
+                recur (DidGetSelfPid pid) (kp pid)
 
             SendMessage recipientPid message k ->
                 Debug.todo "step SendMessage"
@@ -109,8 +122,8 @@ step_ reductionBudget pid trace program =
             Receive { timeout } km ->
                 Debug.todo "step Receive"
 
-            Spawn childProgram kp ->
+            Spawn childProgram_ kp ->
                 Debug.todo "step Spawn"
 
             End ->
-                ( program, DidEnd :: trace )
+                ( End, List.reverse (DidEnd :: trace) )

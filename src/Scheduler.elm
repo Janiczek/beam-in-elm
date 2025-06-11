@@ -1,6 +1,8 @@
 module Scheduler exposing (Scheduler)
 
+import Dict exposing (Dict)
 import PID exposing (PID)
+import Proc exposing (Proc)
 import Queue exposing (Queue)
 
 
@@ -38,7 +40,7 @@ step : Scheduler -> Scheduler
 step scheduler =
     case Queue.dequeue scheduler.readyQueue of
         ( Nothing, _ ) ->
-            ()
+            Debug.todo "step Nothing"
 
         ( Just pid, restOfQueue ) ->
-            ()
+            Debug.todo "step Just(pid)"
