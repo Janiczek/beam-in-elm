@@ -1,4 +1,4 @@
-module ReadyQueue exposing (ReadyQueue, dequeue, empty, enqueue)
+module ReadyQueue exposing (ReadyQueue, dequeue, empty, enqueue, toList)
 
 import PID exposing (PID)
 import Queue exposing (Queue)
@@ -44,3 +44,8 @@ dequeue readyQueue =
                     , set = Set.remove pid readyQueue.set
                   }
                 )
+
+
+toList : ReadyQueue -> List PID
+toList readyQueue =
+    Queue.toList readyQueue.queue
