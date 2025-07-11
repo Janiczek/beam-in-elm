@@ -1,6 +1,4 @@
-module Program exposing (Program(..), Trace(..))
-
--- TODO: test at function entry: if (reductionBudget < 0) { yield }
+module Program exposing (Message, Program(..), example, hasEnded)
 
 import PID exposing (PID)
 
@@ -25,21 +23,32 @@ type Program
     = Work String Int K
     | GetSelfPid KP
     | SendMessage PID Message K
-    | Receive { timeout : Maybe Int } KM
+    | Receive KM
       -- TODO crash/exit/raise
     | Spawn Program KP
     | End
 
 
-type Trace
-    = DidWork String Int
-    | DidGetSelfPid Int
-    | DidSendMessage PID Message
-    | DidReceiveWanted String
-    | DidReceiveUnwanted String
-    | DidntReceive
-    | DidSpawn PID
-    | DidEnd
+hasEnded : Program -> Bool
+hasEnded program =
+    case program of
+        End ->
+            True
+
+        Work _ _ _ ->
+            False
+
+        GetSelfPid _ ->
+            False
+
+        SendMessage _ _ _ ->
+            False
+
+        Receive _ ->
+            False
+
+        Spawn _ _ ->
+            False
 
 
 
@@ -54,9 +63,9 @@ example =
                 \pid ->
                     Spawn (childProgram pid) <|
                         \childPid ->
-                            Work "ex after spawn" 10 <|
+                            Work ("ex after spawn PID " ++ String.fromInt childPid) 10 <|
                                 \() ->
-                                    Receive { timeout = Nothing } <|
+                                    Receive <|
                                         \msg ->
                                             case msg of
                                                 "done" ->
@@ -76,54 +85,3 @@ childProgram parentPid =
             SendMessage parentPid "done" <|
                 \() ->
                     End
-
-
-
--- STEP
-
-
-step : Int -> PID -> Program -> ( Program, List Trace )
-step reductionBudget pid program =
-    step_ reductionBudget pid [] program
-
-
-step_ : Int -> PID -> List Trace -> Program -> ( Program, List Trace )
-step_ reductionBudget pid trace program =
-    if reductionBudget <= 0 then
-        ( program, trace )
-
-    else
-        let
-            recur : Trace -> Program -> ( Program, List Trace )
-            recur newStep newProgram =
-                step_ (reductionBudget - 1) pid (newStep :: trace) newProgram
-        in
-        case program of
-            Work label amount k ->
-                case compare amount reductionBudget of
-                    LT ->
-                        -- do this work _and then some_
-                        recur (DidWork label amount) (Work label (reductionBudget - amount) k)
-
-                    EQ ->
-                        -- finish doing this work then yield
-                        recur (DidWork label amount) (k ())
-
-                    GT ->
-                        -- do only a part of this work
-                        recur (DidWork label reductionBudget) (Work label (amount - reductionBudget) k)
-
-            GetSelfPid kp ->
-                recur (DidGetSelfPid pid) (kp pid)
-
-            SendMessage recipientPid message k ->
-                Debug.todo "step SendMessage"
-
-            Receive { timeout } km ->
-                Debug.todo "step Receive"
-
-            Spawn childProgram_ kp ->
-                Debug.todo "step Spawn"
-
-            End ->
-                ( End, List.reverse (DidEnd :: trace) )
