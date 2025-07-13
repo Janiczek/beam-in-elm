@@ -39,31 +39,23 @@ type Program
 
 example : Program
 example =
-    Work "ex before spawn" 2 <|
-        \() ->
-            GetSelfPid <|
-                \pid ->
-                    Spawn (childProgram pid) <|
-                        \childPid ->
-                            Work ("ex after spawn PID " ++ String.fromInt childPid) 10 <|
-                                \() ->
-                                    Receive <|
-                                        \msg ->
-                                            case msg of
-                                                "done" ->
-                                                    Just <|
-                                                        Work "ex after receive" 2 <|
-                                                            \() ->
-                                                                End
-
-                                                _ ->
-                                                    Nothing
+    Work "ex before spawn" 2 <| \() ->
+    GetSelfPid <| \pid ->
+    Spawn (childProgram pid) <| \childPid ->
+    Work ("ex after spawn PID " ++ String.fromInt childPid) 10 <| \() ->
+    Receive <| \msg ->
+    case msg of
+        "done" ->
+            Just <|
+                Work "ex after receive" 2 <| \() ->
+                End
+ 
+        _ ->
+            Nothing
 
 
 childProgram : PID -> Program
 childProgram parentPid =
-    Work "child" 20 <|
-        \() ->
-            SendMessage parentPid "done" <|
-                \() ->
-                    End
+    Work "child" 20 <| \() ->
+    SendMessage parentPid "done" <| \() ->
+    End
