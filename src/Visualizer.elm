@@ -97,38 +97,42 @@ view model =
     in
     div [ style "padding" "20px", style "font-family" "monospace" ]
         [ h1 [] [ text "Scheduler Visualizer" ]
-        , div [ style "margin-bottom" "20px" ]
-            [ button
-                [ onClick StepBackward
-                , disabled (not canStepBackward)
-                , style "margin-right" "10px"
-                , style "padding" "8px 16px"
+        , div [ style "display" "flex", style "flex-direction" "column", style "gap" "20px" ]
+            [ div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
+                [ div [ style "display" "flex", style "gap" "10px", style "align-items" "center" ]
+                    [ button
+                        [ onClick StepBackward
+                        , disabled (not canStepBackward)
+                        , style "padding" "8px 16px"
+                        ]
+                        [ text "← Step Backward" ]
+                    , button
+                        [ onClick StepForward
+                        , disabled (not canStepForward)
+                        , style "padding" "8px 16px"
+                        ]
+                        [ text "Step Forward →" ]
+                    , button
+                        [ onClick Reset
+                        , style "padding" "8px 16px"
+                        ]
+                        [ text "Reset" ]
+                    ]
+                , div [ style "color" "#666" ]
+                    [ text ("Step " ++ String.fromInt (List.length (Zipper.listPrev model.history) + 1)) ]
                 ]
-                [ text "← Step Backward" ]
-            , button
-                [ onClick StepForward
-                , disabled (not canStepForward)
-                , style "margin-right" "10px"
-                , style "padding" "8px 16px"
-                ]
-                [ text "Step Forward →" ]
-            , button
-                [ onClick Reset
-                , style "padding" "8px 16px"
-                ]
-                [ text "Reset" ]
-            , div [ style "margin-top" "10px", style "color" "#666" ]
-                [ text ("Step " ++ String.fromInt (List.length (Zipper.listPrev model.history) + 1)) ]
+            , viewScheduler currentScheduler
             ]
-        , viewScheduler currentScheduler
         ]
 
 
 viewScheduler : Scheduler -> Html msg
 viewScheduler scheduler =
-    div []
-        [ viewReadyQueue scheduler.readyQueue
-        , viewProcesses scheduler.procs
+    div [ style "display" "flex", style "flex-direction" "column", style "gap" "20px" ]
+        [ div [ style "display" "flex", style "gap" "20px", style "align-items" "start" ]
+            [ viewProcesses scheduler.procs
+            , viewReadyQueue scheduler.readyQueue
+            ]
         , viewTrace scheduler.trace
         ]
 
@@ -140,8 +144,8 @@ viewReadyQueue readyQueue =
         queueItems =
             ReadyQueue.toList readyQueue |> List.map String.fromInt
     in
-    div [ style "margin-bottom" "20px" ]
-        [ h3 [] [ text "Ready Queue" ]
+    div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
+        [ h3 [] [ text "Ready Queue (top = next to run)" ]
         , div [ style "background" "#f5f5f5", style "padding" "10px", style "border-radius" "4px" ]
             [ if List.isEmpty queueItems then
                 text "Empty"
@@ -154,49 +158,77 @@ viewReadyQueue readyQueue =
 
 viewProcesses : Dict.Dict PID Proc -> Html msg
 viewProcesses procs =
-    div [ style "margin-bottom" "20px" ]
+    div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
         [ h3 [] [ text "Processes" ]
-        , div []
-            (Dict.toList procs
-                |> List.map viewProcess
-            )
+        , table
+            [ style "border-collapse" "collapse"
+            , style "font-family" "monospace"
+            , style "font-size" "14px"
+            , style "width" "fit-content"
+            ]
+            [ thead []
+                [ tr []
+                    [ th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "5ch" ] [ text "PID" ]
+                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "20ch" ] [ text "State" ]
+                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "20ch" ] [ text "Mailbox" ]
+                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "40ch" ] [ text "Program" ]
+                    ]
+                ]
+            , tbody []
+                (Dict.toList procs
+                    |> List.map viewProcessRow
+                )
+            ]
         ]
 
 
-viewProcess : ( PID, Proc ) -> Html msg
-viewProcess ( pid, proc ) =
+viewProcessRow : ( PID, Proc ) -> Html msg
+viewProcessRow ( pid, proc ) =
     let
         stateColor : String
         stateColor =
             case proc.state of
                 ReadyToRun ->
-                    "#4CAF50"
+                    "greenyellow"
 
                 WaitingForMsg ->
-                    "#FF9800"
-    in
-    div
-        [ style "border" "1px solid #ddd"
-        , style "margin" "5px 0"
-        , style "padding" "10px"
-        , style "border-radius" "4px"
-        , style "border-left" ("4px solid " ++ stateColor)
-        ]
-        [ div [ style "font-weight" "bold" ] [ text ("PID " ++ String.fromInt pid) ]
-        , div [ style "color" "#666", style "font-size" "0.9em" ]
-            [ text ("State: " ++ stateToString proc.state) ]
-        , div [ style "margin-top" "5px" ]
-            [ div []
-                [ div [ style "font-weight" "bold", style "margin-bottom" "5px" ] [ text "Mailbox:" ]
-                , if List.isEmpty proc.mailbox then
-                    div [ style "color" "#999", style "font-style" "italic" ] [ text "Empty" ]
+                    "orange"
 
-                  else
-                    ul [ style "margin" "0", style "padding-left" "20px" ]
-                        (List.map (\message -> li [] [ text message ]) proc.mailbox)
-                ]
+                Ended ->
+                    "lightgray"
+    in
+    tr []
+        [ td
+            [ style "padding" "8px"
+            , style "font-weight" "bold"
+            , style "background" stateColor
             ]
-        , viewProgram proc.program
+            [ text (String.fromInt pid) ]
+        , td
+            [ style "padding" "8px"
+            , style "background" stateColor
+            ]
+            [ text (stateToString proc.state) ]
+        , td
+            [ style "padding" "8px"
+            , style "background" stateColor
+            ]
+            [ if List.isEmpty proc.mailbox then
+                text "Empty"
+
+              else
+                div
+                    [ style "display" "flex"
+                    , style "flex-direction" "column"
+                    , style "gap" "2px"
+                    ]
+                    (List.map (\message -> div [] [ text ("- " ++ message) ]) proc.mailbox)
+            ]
+        , td
+            [ style "padding" "8px"
+            , style "background" stateColor
+            ]
+            [ viewProgram proc.program ]
         ]
 
 
@@ -208,6 +240,9 @@ stateToString state =
 
         WaitingForMsg ->
             "Waiting for Message"
+
+        Ended ->
+            "Ended"
 
 
 viewProgram : Program.Program -> Html msg
@@ -239,14 +274,14 @@ viewProgram program =
 
 viewTrace : List Step -> Html msg
 viewTrace trace =
-    div [ style "margin-bottom" "20px" ]
+    div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
         [ h3 [] [ text "Execution Trace" ]
         , div [ style "background" "#f9f9f9", style "padding" "10px", style "border-radius" "4px", style "max-height" "300px", style "overflow-y" "auto" ]
             [ if List.isEmpty trace then
                 text "No steps yet"
 
               else
-                div [] (List.map viewTraceStep (List.reverse trace))
+                div [ style "display" "flex", style "flex-direction" "column", style "gap" "2px" ] (List.map viewTraceStep (List.reverse trace))
             ]
         ]
 
@@ -287,7 +322,7 @@ viewTraceStep step =
                 NothingInTheReadyQueue ->
                     "Nothing in the ready queue"
     in
-    div [ style "margin" "2px 0", style "padding" "2px 0" ] [ text stepText ]
+    div [ style "padding" "2px 0" ] [ text stepText ]
 
 
 isFinished : Scheduler -> Bool

@@ -49,27 +49,31 @@ init program =
 
 
 step : Scheduler -> Scheduler
-step scheduler =
-    case ReadyQueue.dequeue scheduler.readyQueue of
+step sch =
+    case ReadyQueue.dequeue sch.readyQueue of
         Nothing ->
             -- No more work (finished? deadlock?)
-            scheduler
+            sch
                 |> log [ NothingInTheReadyQueue ]
 
         Just ( pid, restOfQueue ) ->
-            case Dict.get pid scheduler.procs of
+            case Dict.get pid sch.procs of
                 Nothing ->
-                    scheduler
+                    sch
                         |> setReadyQueue restOfQueue
                         |> log [ DidTryToRunNonexistentProcess { process = pid } ]
 
                 Just proc ->
                     let
                         ( sch2, program2, trace ) =
-                            stepProgram (scheduler |> setReadyQueue restOfQueue) reductionsBudget pid proc
+                            stepProgram (sch |> setReadyQueue restOfQueue) reductionsBudget pid proc
+
+                        proc2 =
+                            Dict.get pid sch2.procs
+                                |> Maybe.withDefault proc
 
                         shouldReenqueue =
-                            not (Program.hasEnded program2)
+                            not (Proc.hasEnded proc2)
                     in
                     sch2
                         |> updateProc pid (Proc.setProgram program2)
@@ -140,7 +144,15 @@ stepProgram_ sch budget pid mailbox trace program =
                     Just recipientProc ->
                         let
                             shouldEnqueue =
-                                recipientProc.state == Proc.WaitingForMsg
+                                case recipientProc.state of
+                                    WaitingForMsg ->
+                                        True
+
+                                    ReadyToRun ->
+                                        False
+
+                                    Ended ->
+                                        False
 
                             newRecipientProc =
                                 recipientProc
@@ -204,7 +216,11 @@ stepProgram_ sch budget pid mailbox trace program =
                 recur1 sch2 (DidSpawn { worker = pid, child = newPid }) (kp newPid)
 
             End ->
-                ( sch, End, List.reverse (DidEnd { worker = pid } :: trace) )
+                ( sch
+                    |> updateProc pid (Proc.setState Ended)
+                , End
+                , List.reverse (DidEnd { worker = pid } :: trace)
+                )
 
 
 spawn : Program -> Scheduler -> ( Scheduler, PID )
