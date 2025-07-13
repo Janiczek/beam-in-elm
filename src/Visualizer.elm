@@ -1,6 +1,7 @@
 module Visualizer exposing (main)
 
 import Browser
+import Browser.Dom as Dom
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -11,6 +12,7 @@ import Proc exposing (Proc, State(..))
 import Program exposing (example)
 import ReadyQueue exposing (ReadyQueue)
 import Scheduler exposing (Scheduler)
+import Task
 import Trace exposing (Step(..))
 
 
@@ -25,6 +27,7 @@ type Msg
     | StepBackward
     | Reset
     | UpdateBudget String
+    | HasScrolledToBottomOfTrace (Result Dom.Error ())
 
 
 init : () -> ( Model, Cmd Msg )
@@ -49,6 +52,13 @@ initWithBudget budget =
     )
 
 
+jumpToBottom : String -> Cmd Msg
+jumpToBottom id =
+    Dom.getViewportOf id
+        |> Task.andThen (\info -> Dom.setViewportOf id 0 info.scene.height)
+        |> Task.attempt HasScrolledToBottomOfTrace
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -67,14 +77,14 @@ update msg model =
                     Zipper.consAfter nextScheduler model.history
             in
             ( { model | history = newHistory }
-            , Cmd.none
+            , jumpToBottom traceId
             )
 
         StepBackward ->
             case Zipper.prev model.history of
                 Just newHistory ->
                     ( { model | history = newHistory }
-                    , Cmd.none
+                    , jumpToBottom traceId
                     )
 
                 Nothing ->
@@ -90,6 +100,9 @@ update msg model =
 
                 Nothing ->
                     ( model, Cmd.none )
+
+        HasScrolledToBottomOfTrace _ ->
+            ( model, Cmd.none )
 
 
 view : Model -> Html Msg
@@ -297,6 +310,11 @@ viewProgram program =
     div [ style "color" "#333", style "font-size" "0.9em" ] [ text programText ]
 
 
+traceId : String
+traceId =
+    "trace"
+
+
 viewTrace : List Step -> Html msg
 viewTrace trace =
     div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
@@ -308,17 +326,18 @@ viewTrace trace =
             ]
             [ div
                 [ style "display" "flex"
-                , style "flex-direction" "column-reverse"
+                , style "flex-direction" "column"
                 , style "gap" "2px"
                 , style "height" "200px"
                 , style "max-height" "200px"
                 , style "overflow-y" "auto"
+                , id traceId
                 ]
                 (if List.isEmpty trace then
                     [ text "No steps yet" ]
 
                  else
-                    List.map viewTraceStep (List.reverse trace)
+                    List.map viewTraceStep trace
                 )
             ]
         ]
