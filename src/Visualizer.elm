@@ -281,7 +281,12 @@ viewTrace trace =
                 text "No steps yet"
 
               else
-                div [ style "display" "flex", style "flex-direction" "column", style "gap" "2px" ] (List.map viewTraceStep (List.reverse trace))
+                div
+                    [ style "display" "flex"
+                    , style "flex-direction" "column"
+                    , style "gap" "2px"
+                    ]
+                    (List.map viewTraceStep trace)
             ]
         ]
 
