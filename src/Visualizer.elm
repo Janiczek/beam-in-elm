@@ -4,7 +4,7 @@ import Browser
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick)
+import Html.Events exposing (onClick, onInput)
 import List.NonEmpty.Zipper as Zipper exposing (Zipper)
 import PID exposing (PID)
 import Proc exposing (Proc, State(..))
@@ -16,6 +16,7 @@ import Trace exposing (Step(..))
 
 type alias Model =
     { history : Zipper Scheduler
+    , budget : Int
     }
 
 
@@ -23,19 +24,26 @@ type Msg
     = StepForward
     | StepBackward
     | Reset
+    | UpdateBudget String
 
 
 init : () -> ( Model, Cmd Msg )
-init _ =
+init () =
+    initWithBudget 1
+
+
+initWithBudget : Int -> ( Model, Cmd Msg )
+initWithBudget budget =
     let
         initialScheduler : Scheduler
         initialScheduler =
             Scheduler.init
-                { reductionsBudget = 1
+                { reductionsBudget = budget
                 , program = example
                 }
     in
     ( { history = Zipper.singleton initialScheduler
+      , budget = budget
       }
     , Cmd.none
     )
@@ -73,17 +81,15 @@ update msg model =
                     ( model, Cmd.none )
 
         Reset ->
-            let
-                initialScheduler : Scheduler
-                initialScheduler =
-                    Scheduler.init
-                        { reductionsBudget = 1
-                        , program = example
-                        }
-            in
-            ( { history = Zipper.singleton initialScheduler }
-            , Cmd.none
-            )
+            initWithBudget model.budget
+
+        UpdateBudget budgetStr ->
+            case String.toInt budgetStr of
+                Just budget ->
+                    initWithBudget budget
+
+                Nothing ->
+                    ( model, Cmd.none )
 
 
 view : Model -> Html Msg
@@ -123,6 +129,19 @@ view model =
                         , style "padding" "8px 16px"
                         ]
                         [ text "Reset" ]
+                    , div [ style "display" "flex", style "align-items" "center", style "gap" "5px" ]
+                        [ label [] [ text "Budget:" ]
+                        , input
+                            [ value (String.fromInt model.budget)
+                            , onInput UpdateBudget
+                            , style "width" "60px"
+                            , style "padding" "4px"
+                            , style "font-family" "monospace"
+                            , type_ "number"
+                            , Html.Attributes.min "1"
+                            ]
+                            []
+                        ]
                     ]
                 , div [ style "color" "#666" ]
                     [ text ("Step " ++ String.fromInt (List.length (Zipper.listPrev model.history) + 1)) ]

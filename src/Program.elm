@@ -1,4 +1,4 @@
-module Program exposing (Message, Program(..), example, hasEnded)
+module Program exposing (Message, Program(..), example)
 
 import PID exposing (PID)
 
@@ -27,28 +27,6 @@ type Program
       -- TODO crash/exit/raise
     | Spawn Program KP
     | End
-
-
-hasEnded : Program -> Bool
-hasEnded program =
-    case program of
-        End ->
-            True
-
-        Work _ _ _ ->
-            False
-
-        GetSelfPid _ ->
-            False
-
-        SendMessage _ _ _ ->
-            False
-
-        Receive _ ->
-            False
-
-        Spawn _ _ ->
-            False
 
 
 

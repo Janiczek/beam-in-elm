@@ -1,4 +1,4 @@
-module Proc exposing (Proc, State(..), addToMailbox, hasEnded, init, setMailbox, setProgram, setState)
+module Proc exposing (Proc, State(..), addToMailbox, init, setMailbox, setProgram, setState)
 
 import Program exposing (Message, Program)
 
@@ -45,16 +45,3 @@ addToMailbox message proc =
 setMailbox : List Message -> Proc -> Proc
 setMailbox mailbox proc =
     { proc | mailbox = mailbox }
-
-
-hasEnded : Proc -> Bool
-hasEnded proc =
-    case proc.state of
-        Ended ->
-            True
-
-        ReadyToRun ->
-            False
-
-        WaitingForMsg ->
-            False

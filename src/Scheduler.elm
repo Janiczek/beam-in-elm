@@ -70,7 +70,15 @@ step sch =
                                 |> Maybe.withDefault proc
 
                         shouldReenqueue =
-                            not (Proc.hasEnded proc2)
+                            case proc2.state of
+                                ReadyToRun ->
+                                    True
+
+                                Ended ->
+                                    False
+
+                                WaitingForMsg ->
+                                    False
                     in
                     sch2
                         |> updateProc pid (Proc.setProgram program2)
