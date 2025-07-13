@@ -1,4 +1,4 @@
-module Main exposing (main)
+module Visualizer exposing (main)
 
 import Browser
 import Dict
@@ -186,7 +186,16 @@ viewProcess ( pid, proc ) =
         , div [ style "color" "#666", style "font-size" "0.9em" ]
             [ text ("State: " ++ stateToString proc.state) ]
         , div [ style "margin-top" "5px" ]
-            [ text ("Mailbox: " ++ String.fromInt (List.length proc.mailbox) ++ " messages") ]
+            [ div []
+                [ div [ style "font-weight" "bold", style "margin-bottom" "5px" ] [ text "Mailbox:" ]
+                , if List.isEmpty proc.mailbox then
+                    div [ style "color" "#999", style "font-style" "italic" ] [ text "Empty" ]
+
+                  else
+                    ul [ style "margin" "0", style "padding-left" "20px" ]
+                        (List.map (\message -> li [] [ text message ]) proc.mailbox)
+                ]
+            ]
         , viewProgram proc.program
         ]
 
