@@ -12,5 +12,8 @@ https://blog.stenmans.org/theBeamBook/
 
 ## TODO
 
-- [ ] Visualizer
 - [ ] Tests
+- [ ] Links, monitors, supervisors: https://erlang.org/course/error_handling.html
+  - [ ] Link (bidirectional signaling about crashes)
+  - [ ] Monitor (onedirectional signaling about crashes)
+  - [ ] Exit trapping
