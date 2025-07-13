@@ -14,7 +14,7 @@ type alias Scheduler =
     { readyQueue : ReadyQueue
     , procs : Dict PID Proc
     , nextUnusedPid : PID
-    , trace : List Step
+    , revTraces : List (List Step)
     , reductionsBudget : Int
     }
 
@@ -24,7 +24,7 @@ init { reductionsBudget, program } =
     { readyQueue = ReadyQueue.empty
     , procs = Dict.empty
     , nextUnusedPid = 0
-    , trace = []
+    , revTraces = []
     , reductionsBudget = reductionsBudget
     }
         |> spawn program
@@ -62,7 +62,7 @@ step sch =
 
                 Just proc ->
                     let
-                        ( sch2, program2, trace ) =
+                        ( sch2, program2, revTrace ) =
                             stepProgram (sch |> setReadyQueue restOfQueue) sch.reductionsBudget pid proc
 
                         proc2 =
@@ -82,7 +82,7 @@ step sch =
                     in
                     sch2
                         |> updateProc pid (Proc.setProgram program2)
-                        |> log trace
+                        |> log (List.reverse revTrace)
                         |> (if shouldReenqueue then
                                 enqueue pid
 
@@ -97,15 +97,15 @@ stepProgram sch budget pid proc =
 
 
 stepProgram_ : Scheduler -> Int -> PID -> List Message -> List Step -> Program -> ( Scheduler, Program, List Step )
-stepProgram_ sch budget pid mailbox trace program =
+stepProgram_ sch budget pid mailbox revTrace program =
     if budget <= 0 then
-        ( sch, program, trace )
+        ( sch, program, revTrace )
 
     else
         let
             recur : Int -> Scheduler -> Step -> Program -> ( Scheduler, Program, List Step )
             recur workDone sch2 newStep newProgram =
-                stepProgram_ sch2 (budget - workDone) pid mailbox (newStep :: trace) newProgram
+                stepProgram_ sch2 (budget - workDone) pid mailbox (newStep :: revTrace) newProgram
 
             recur1 : Scheduler -> Step -> Program -> ( Scheduler, Program, List Step )
             recur1 =
@@ -169,17 +169,18 @@ stepProgram_ sch budget pid mailbox trace program =
                                             identity
                                        )
                         in
-                        ( sch
-                            |> setProc recipientPid newRecipientProc
-                            |> (if shouldEnqueue then
-                                    enqueue recipientPid
+                        recur1
+                            (sch
+                                |> setProc recipientPid newRecipientProc
+                                |> (if shouldEnqueue then
+                                        enqueue recipientPid
 
-                                else
-                                    identity
-                               )
-                        , k ()
-                        , [ DidSendMessageTo { worker = pid, recipient = recipientPid, message = message } ]
-                        )
+                                    else
+                                        identity
+                                   )
+                            )
+                            (DidSendMessageTo { worker = pid, recipient = recipientPid, message = message })
+                            (k ())
 
             Receive km ->
                 -- TODO: should mailbox be a queue? zipper would make sense too, see below
@@ -193,7 +194,7 @@ stepProgram_ sch budget pid mailbox trace program =
                                 ( sch
                                     |> updateProc pid (Proc.setState WaitingForMsg)
                                 , program
-                                , DidTryToReceiveUnsuccessfully { worker = pid } :: trace
+                                , DidTryToReceiveUnsuccessfully { worker = pid } :: revTrace
                                 )
 
                             m :: ms ->
@@ -224,7 +225,7 @@ stepProgram_ sch budget pid mailbox trace program =
                 ( sch
                     |> updateProc pid (Proc.setState Ended)
                 , End
-                , List.reverse (DidEnd { worker = pid } :: trace)
+                , DidEnd { worker = pid } :: revTrace
                 )
 
 
@@ -265,5 +266,4 @@ setReadyQueue readyQueue scheduler =
 
 log : List Step -> Scheduler -> Scheduler
 log trace scheduler =
-    -- PERF: hold a reverse list of reverse traces, and only after running the program do the two nested reverses?
-    { scheduler | trace = scheduler.trace ++ trace }
+    { scheduler | revTraces = trace :: scheduler.revTraces }

@@ -171,7 +171,7 @@ viewScheduler scheduler =
             [ viewProcesses scheduler.procs
             , viewReadyQueue scheduler.readyQueue
             ]
-        , viewTrace scheduler.trace
+        , viewTraces (List.reverse scheduler.revTraces)
         ]
 
 
@@ -315,71 +315,75 @@ traceId =
     "trace"
 
 
-viewTrace : List Step -> Html msg
-viewTrace trace =
-    div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
+viewTraces : List (List Step) -> Html msg
+viewTraces traces =
+    div
+        [ style "display" "flex"
+        , style "flex-direction" "column"
+        , style "gap" "10px"
+        ]
         [ h3 [] [ text "Execution Trace" ]
         , div
             [ style "background" "#f9f9f9"
             , style "padding" "10px"
             , style "border-radius" "4px"
+            , style "height" "200px"
+            , style "max-height" "200px"
+            , style "overflow-y" "auto"
+            , id traceId
             ]
-            [ div
-                [ style "display" "flex"
-                , style "flex-direction" "column"
-                , style "gap" "2px"
-                , style "height" "200px"
-                , style "max-height" "200px"
-                , style "overflow-y" "auto"
-                , id traceId
-                ]
-                (if List.isEmpty trace then
-                    [ text "No steps yet" ]
+            (if List.isEmpty traces then
+                [ text "No steps yet" ]
 
-                 else
-                    List.map viewTraceStep trace
-                )
-            ]
+             else
+                traces
+                    |> List.map (List.map stepToString)
+                    |> List.intersperse [ "----" ]
+                    |> List.concat
+                    |> List.map
+                        (\step ->
+                            div
+                                [ style "margin" "2px 0"
+                                , style "padding" "2px 0"
+                                ]
+                                [ text step ]
+                        )
+            )
         ]
 
 
-viewTraceStep : Step -> Html msg
-viewTraceStep step =
-    let
-        stepText : String
-        stepText =
-            case step of
-                DidWork { worker, label, amount } ->
-                    "PID " ++ String.fromInt worker ++ " did work: " ++ label ++ " (" ++ String.fromInt amount ++ " reductions)"
+stepToString : Step -> String
+stepToString step =
+    case step of
+        DidWork { worker, label, amount } ->
+            "PID " ++ String.fromInt worker ++ " did work: " ++ label ++ " (" ++ String.fromInt amount ++ " reductions)"
 
-                DidGetSelfPid { worker } ->
-                    "PID " ++ String.fromInt worker ++ " got self PID"
+        DidGetSelfPid { worker } ->
+            "PID " ++ String.fromInt worker ++ " got self PID"
 
-                DidSendMessageTo { worker, recipient, message } ->
-                    "PID " ++ String.fromInt worker ++ " sent message to PID " ++ String.fromInt recipient ++ ": " ++ message
+        DidSendMessageTo { worker, recipient, message } ->
+            "PID " ++ String.fromInt worker ++ " sent message to PID " ++ String.fromInt recipient ++ ": " ++ message
 
-                DidTryToSendMessageToNonexistentPid { worker, recipient, message } ->
-                    "PID " ++ String.fromInt worker ++ " tried to send message to nonexistent PID " ++ String.fromInt recipient ++ ": " ++ message
+        DidTryToSendMessageToNonexistentPid { worker, recipient, message } ->
+            "PID " ++ String.fromInt worker ++ " tried to send message to nonexistent PID " ++ String.fromInt recipient ++ ": " ++ message
 
-                DidReceiveMsg { worker, message } ->
-                    "PID " ++ String.fromInt worker ++ " received message: " ++ message
+        DidReceiveMsg { worker, message } ->
+            "PID " ++ String.fromInt worker ++ " received message: " ++ message
 
-                DidTryToReceiveUnsuccessfully { worker } ->
-                    "PID " ++ String.fromInt worker ++ " tried to receive but no matching message found"
+        DidTryToReceiveUnsuccessfully { worker } ->
+            "PID " ++ String.fromInt worker ++ " tried to receive but no matching message found"
 
-                DidSpawn { worker, child } ->
-                    "PID " ++ String.fromInt worker ++ " spawned child PID " ++ String.fromInt child
+        DidSpawn { worker, child } ->
+            "PID " ++ String.fromInt worker ++ " spawned child PID " ++ String.fromInt child
 
-                DidEnd { worker } ->
-                    "PID " ++ String.fromInt worker ++ " ended"
+        DidEnd { worker } ->
+            "PID " ++ String.fromInt worker ++ " ended"
 
-                DidTryToRunNonexistentProcess { process } ->
-                    "Tried to run nonexistent process PID " ++ String.fromInt process
+        DidTryToRunNonexistentProcess { process } ->
+            "Tried to run nonexistent process PID " ++ String.fromInt process
 
-                NothingInTheReadyQueue ->
-                    "Nothing in the ready queue"
-    in
-    div [ style "padding" "2px 0" ] [ text stepText ]
+        NothingInTheReadyQueue ->
+            "Nothing in the ready queue"
 
 
 isFinished : Scheduler -> Bool
