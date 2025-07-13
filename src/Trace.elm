@@ -1,7 +1,7 @@
 module Trace exposing (Step(..), Trace)
 
 import PID exposing (PID)
-import Program exposing (Message)
+import Program exposing (CrashReason, Message)
 
 
 type alias Trace =
@@ -16,6 +16,7 @@ type Step
     | DidReceiveMsg { worker : PID, message : Message }
     | DidTryToReceiveUnsuccessfully { worker : PID }
     | DidSpawn { worker : PID, child : PID }
-    | DidEnd { worker : PID }
+    | DidEndNormally { worker : PID }
+    | DidCrash { worker : PID, reason : CrashReason }
     | DidTryToRunNonexistentProcess { process : PID }
     | NothingInTheReadyQueue

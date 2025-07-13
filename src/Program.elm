@@ -1,9 +1,13 @@
-module Program exposing (Message, Program(..), example)
+module Program exposing (CrashReason, Message, Program(..), example)
 
 import PID exposing (PID)
 
 
 type alias Message =
+    String
+
+
+type alias CrashReason =
     String
 
 
@@ -24,9 +28,9 @@ type Program
     | GetSelfPid KP
     | SendMessage PID Message K
     | Receive KM
-      -- TODO crash/exit/raise
     | Spawn Program KP
     | End
+    | Crash String
 
 
 
@@ -35,23 +39,31 @@ type Program
 
 example : Program
 example =
-    Work "ex before spawn" 2 <| \() ->
-    GetSelfPid <| \pid ->
-    Spawn (childProgram pid) <| \childPid ->
-    Work ("ex after spawn PID " ++ String.fromInt childPid) 10 <| \() ->
-    Receive <| \msg ->
-    case msg of
-        "done" ->
-            Just <|
-                Work "ex after receive" 2 <| \() ->
-                End
+    Work "ex before spawn" 2 <|
+        \() ->
+            GetSelfPid <|
+                \pid ->
+                    Spawn (childProgram pid) <|
+                        \childPid ->
+                            Work ("ex after spawn PID " ++ String.fromInt childPid) 10 <|
+                                \() ->
+                                    Receive <|
+                                        \msg ->
+                                            case msg of
+                                                "done" ->
+                                                    Just <|
+                                                        Work "ex after receive" 2 <|
+                                                            \() ->
+                                                                End
 
-        _ ->
-            Nothing
+                                                _ ->
+                                                    Nothing
 
 
 childProgram : PID -> Program
 childProgram parentPid =
-    Work "child" 20 <| \() ->
-    SendMessage parentPid "done" <| \() ->
-    End
+    Work "child" 20 <|
+        \() ->
+            SendMessage parentPid "done" <|
+                \() ->
+                    End

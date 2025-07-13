@@ -1,6 +1,6 @@
 module Proc exposing (Proc, State(..), addToMailbox, init, setMailbox, setProgram, setState)
 
-import Program exposing (Message, Program)
+import Program exposing (CrashReason, Message, Program)
 
 
 type alias Proc =
@@ -16,7 +16,8 @@ This would perhaps be more important to track if we allowed parallelism.
 type State
     = ReadyToRun
     | WaitingForMsg
-    | Ended
+    | EndedNormally
+    | Crashed CrashReason
 
 
 init : Program -> Proc

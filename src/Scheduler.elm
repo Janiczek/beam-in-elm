@@ -1,4 +1,4 @@
-module Scheduler exposing (Scheduler, init, step)
+module Scheduler exposing (Scheduler, init, reductionsBudget, step)
 
 import Dict exposing (Dict)
 import PID exposing (PID)
@@ -20,14 +20,14 @@ type alias Scheduler =
 
 
 init : { reductionsBudget : Int, program : Program } -> Scheduler
-init { reductionsBudget, program } =
+init r =
     { readyQueue = ReadyQueue.empty
     , procs = Dict.empty
     , nextUnusedPid = 0
     , revTraces = []
-    , reductionsBudget = reductionsBudget
+    , reductionsBudget = r.reductionsBudget
     }
-        |> spawn program
+        |> spawn r.program
         |> Tuple.first
 
 
@@ -74,7 +74,10 @@ step sch =
                                 ReadyToRun ->
                                     True
 
-                                Ended ->
+                                EndedNormally ->
+                                    False
+
+                                Crashed _ ->
                                     False
 
                                 WaitingForMsg ->
@@ -156,7 +159,10 @@ stepProgram_ sch budget pid mailbox revTrace program =
                                     ReadyToRun ->
                                         False
 
-                                    Ended ->
+                                    EndedNormally ->
+                                        False
+
+                                    Crashed _ ->
                                         False
 
                             newRecipientProc =
@@ -223,9 +229,16 @@ stepProgram_ sch budget pid mailbox revTrace program =
 
             End ->
                 ( sch
-                    |> updateProc pid (Proc.setState Ended)
+                    |> updateProc pid (Proc.setState EndedNormally)
                 , End
-                , DidEnd { worker = pid } :: revTrace
+                , DidEndNormally { worker = pid } :: revTrace
+                )
+
+            Crash reason ->
+                ( sch
+                    |> updateProc pid (Proc.setState (Crashed reason))
+                , Crash reason
+                , DidCrash { worker = pid, reason = reason } :: revTrace
                 )
 
 
@@ -267,3 +280,8 @@ setReadyQueue readyQueue scheduler =
 log : List Step -> Scheduler -> Scheduler
 log trace scheduler =
     { scheduler | revTraces = trace :: scheduler.revTraces }
+
+
+reductionsBudget : Scheduler -> Int
+reductionsBudget scheduler =
+    scheduler.reductionsBudget

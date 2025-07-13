@@ -18,7 +18,7 @@ import Trace exposing (Step(..))
 
 type alias Model =
     { history : Zipper Scheduler
-    , budget : Int
+    , budget : String
     }
 
 
@@ -27,6 +27,7 @@ type Msg
     | StepBackward
     | Reset
     | UpdateBudget String
+    | ResetWithBudget Int
     | HasScrolledToBottomOfTrace (Result Dom.Error ())
 
 
@@ -46,7 +47,7 @@ initWithBudget budget =
                 }
     in
     ( { history = Zipper.singleton initialScheduler
-      , budget = budget
+      , budget = String.fromInt budget
       }
     , Cmd.none
     )
@@ -91,15 +92,16 @@ update msg model =
                     ( model, Cmd.none )
 
         Reset ->
-            initWithBudget model.budget
+            model.budget
+                |> String.toInt
+                |> Maybe.withDefault 1
+                |> initWithBudget
 
         UpdateBudget budgetStr ->
-            case String.toInt budgetStr of
-                Just budget ->
-                    initWithBudget budget
+            ( { model | budget = budgetStr }, Cmd.none )
 
-                Nothing ->
-                    ( model, Cmd.none )
+        ResetWithBudget budgetInt ->
+            initWithBudget budgetInt
 
         HasScrolledToBottomOfTrace _ ->
             ( model, Cmd.none )
@@ -142,22 +144,41 @@ view model =
                         , style "padding" "8px 16px"
                         ]
                         [ text "Reset" ]
-                    , div [ style "display" "flex", style "align-items" "center", style "gap" "5px" ]
+                    , div
+                        [ style "display" "flex"
+                        , style "align-items" "center"
+                        , style "gap" "5px"
+                        ]
                         [ label [] [ text "Budget:" ]
                         , input
-                            [ value (String.fromInt model.budget)
+                            [ value model.budget
                             , onInput UpdateBudget
                             , style "width" "60px"
                             , style "padding" "4px"
                             , style "font-family" "monospace"
                             , type_ "number"
-                            , Html.Attributes.min "1"
                             ]
                             []
+                        , button
+                            [ case String.toInt model.budget of
+                                Just budget ->
+                                    if budget >= 1 then
+                                        onClick (ResetWithBudget budget)
+
+                                    else
+                                        disabled True
+
+                                Nothing ->
+                                    disabled True
+                            , style "padding" "8px 16px"
+                            ]
+                            [ text "Reset with budget" ]
                         ]
                     ]
                 , div [ style "color" "#666" ]
                     [ text ("Step " ++ String.fromInt (List.length (Zipper.listPrev model.history) + 1)) ]
+                , div [ style "color" "#666" ]
+                    [ text ("Used budget: " ++ String.fromInt (Scheduler.reductionsBudget currentScheduler)) ]
                 ]
             , viewScheduler currentScheduler
             ]
@@ -232,8 +253,11 @@ viewProcessRow ( pid, proc ) =
                 WaitingForMsg ->
                     "orange"
 
-                Ended ->
+                EndedNormally ->
                     "lightgray"
+
+                Crashed _ ->
+                    "red"
     in
     tr []
         [ td
@@ -279,8 +303,11 @@ stateToString state =
         WaitingForMsg ->
             "Waiting for Message"
 
-        Ended ->
-            "Ended"
+        EndedNormally ->
+            "Ended Normally"
+
+        Crashed reason ->
+            "Crashed: " ++ reason
 
 
 viewProgram : Program.Program -> Html msg
@@ -306,8 +333,13 @@ viewProgram program =
 
                 Program.End ->
                     "End"
+
+                Program.Crash reason ->
+                    "Crash: " ++ reason
     in
-    div [ style "color" "#333", style "font-size" "0.9em" ] [ text programText ]
+    div
+        [ style "color" "#333" ]
+        [ text programText ]
 
 
 traceId : String
@@ -376,8 +408,11 @@ stepToString step =
         DidSpawn { worker, child } ->
             "PID " ++ String.fromInt worker ++ " spawned child PID " ++ String.fromInt child
 
-        DidEnd { worker } ->
-            "PID " ++ String.fromInt worker ++ " ended"
+        DidEndNormally { worker } ->
+            "PID " ++ String.fromInt worker ++ " ended normally"
+
+        DidCrash { worker, reason } ->
+            "PID " ++ String.fromInt worker ++ " crashed: " ++ reason
 
         DidTryToRunNonexistentProcess { process } ->
             "Tried to run nonexistent process PID " ++ String.fromInt process
