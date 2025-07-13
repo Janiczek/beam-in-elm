@@ -8,11 +8,6 @@ import ReadyQueue exposing (ReadyQueue)
 import Trace exposing (Step(..))
 
 
-reductionsBudget : Int
-reductionsBudget =
-    7
-
-
 type alias Scheduler =
     -- OMIT: timeouts
     -- OMIT: priorities, schedule counts - not interesting. https://blog.stenmans.org/theBeamBook/#_the_ready_queue
@@ -20,15 +15,17 @@ type alias Scheduler =
     , procs : Dict PID Proc
     , nextUnusedPid : PID
     , trace : List Step
+    , reductionsBudget : Int
     }
 
 
-init : Program -> Scheduler
-init program =
+init : { reductionsBudget : Int, program : Program } -> Scheduler
+init { reductionsBudget, program } =
     { readyQueue = ReadyQueue.empty
     , procs = Dict.empty
     , nextUnusedPid = 0
     , trace = []
+    , reductionsBudget = reductionsBudget
     }
         |> spawn program
         |> Tuple.first
@@ -66,7 +63,7 @@ step sch =
                 Just proc ->
                     let
                         ( sch2, program2, trace ) =
-                            stepProgram (sch |> setReadyQueue restOfQueue) reductionsBudget pid proc
+                            stepProgram (sch |> setReadyQueue restOfQueue) sch.reductionsBudget pid proc
 
                         proc2 =
                             Dict.get pid sch2.procs

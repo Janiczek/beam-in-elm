@@ -30,7 +30,10 @@ init _ =
     let
         initialScheduler : Scheduler
         initialScheduler =
-            Scheduler.init example
+            Scheduler.init
+                { reductionsBudget = 1
+                , program = example
+                }
     in
     ( { history = Zipper.singleton initialScheduler
       }
@@ -73,7 +76,10 @@ update msg model =
             let
                 initialScheduler : Scheduler
                 initialScheduler =
-                    Scheduler.init example
+                    Scheduler.init
+                        { reductionsBudget = 1
+                        , program = example
+                        }
             in
             ( { history = Zipper.singleton initialScheduler }
             , Cmd.none
@@ -276,17 +282,25 @@ viewTrace : List Step -> Html msg
 viewTrace trace =
     div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
         [ h3 [] [ text "Execution Trace" ]
-        , div [ style "background" "#f9f9f9", style "padding" "10px", style "border-radius" "4px", style "max-height" "300px", style "overflow-y" "auto" ]
-            [ if List.isEmpty trace then
-                text "No steps yet"
+        , div
+            [ style "background" "#f9f9f9"
+            , style "padding" "10px"
+            , style "border-radius" "4px"
+            ]
+            [ div
+                [ style "display" "flex"
+                , style "flex-direction" "column-reverse"
+                , style "gap" "2px"
+                , style "height" "200px"
+                , style "max-height" "200px"
+                , style "overflow-y" "auto"
+                ]
+                (if List.isEmpty trace then
+                    [ text "No steps yet" ]
 
-              else
-                div
-                    [ style "display" "flex"
-                    , style "flex-direction" "column"
-                    , style "gap" "2px"
-                    ]
-                    (List.map viewTraceStep trace)
+                 else
+                    List.map viewTraceStep (List.reverse trace)
+                )
             ]
         ]
 
