@@ -1,4 +1,4 @@
-module Program exposing (CrashReason, Expr(..), Message, Program, Stmt(..), example)
+module Program exposing (CrashReason, Expr(..), Message, Program, Stmt(..), StmtId, example, getStmtId)
 
 
 type alias Message =
@@ -13,14 +13,18 @@ type alias Program =
     List Stmt
 
 
+type alias StmtId =
+    Int
+
+
 type Stmt
-    = Work String Int
-    | Let String Expr
-    | SendMessage Expr Message
-    | Receive (List { message : String, body : Program })
-    | ExprStmt Expr
-    | End
-    | Crash CrashReason
+    = Work StmtId String Int
+    | Let StmtId String Expr
+    | SendMessage StmtId Expr Message
+    | Receive StmtId (List { message : String, body : Program })
+    | ExprStmt StmtId Expr
+    | End StmtId
+    | Crash StmtId CrashReason
 
 
 type Expr
@@ -29,21 +33,46 @@ type Expr
     | Var String
 
 
+getStmtId : Stmt -> StmtId
+getStmtId stmt =
+    case stmt of
+        Work id _ _ ->
+            id
+
+        Let id _ _ ->
+            id
+
+        SendMessage id _ _ ->
+            id
+
+        Receive id _ ->
+            id
+
+        ExprStmt id _ ->
+            id
+
+        End id ->
+            id
+
+        Crash id _ ->
+            id
+
+
 
 -- EXAMPLES
 
 
 example : Program
 example =
-    [ Work "ex before spawn" 2
-    , Let "pid" GetSelfPid
-    , ExprStmt (Spawn (childProgram (Var "pid")))
-    , Work "ex after spawn" 10
-    , Receive
+    [ Work 1 "ex before spawn" 2
+    , Let 2 "pid" GetSelfPid
+    , ExprStmt 3 (Spawn (childProgram (Var "pid")))
+    , Work 4 "ex after spawn" 10
+    , Receive 5
         [ { message = "done"
           , body =
-                [ Work "ex after receive" 2
-                , End
+                [ Work 6 "ex after receive" 2
+                , End 7
                 ]
           }
         ]
@@ -52,7 +81,7 @@ example =
 
 childProgram : Expr -> Program
 childProgram parentPidExpr =
-    [ Work "child" 20
-    , SendMessage parentPidExpr "done"
-    , End
+    [ Work 8 "child" 20
+    , SendMessage 9 parentPidExpr "done"
+    , End 10
     ]

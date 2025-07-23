@@ -1,12 +1,14 @@
-module Proc exposing (Proc, State(..), addToMailbox, init, setMailbox, setProgram, setState)
+module Proc exposing (Proc, State(..), addToMailbox, init, setCurrentStmtId, setMailbox, setProgram, setState)
 
-import Program exposing (CrashReason, Message, Program)
+import Program exposing (CrashReason, Message, Program, StmtId)
 
 
 type alias Proc =
     { mailbox : List Message
     , state : State
     , program : Program
+    , originalProgram : Program
+    , currentStmtId : Maybe StmtId
     }
 
 
@@ -25,6 +27,8 @@ init program =
     { mailbox = []
     , state = ReadyToRun
     , program = program
+    , originalProgram = program
+    , currentStmtId = List.head program |> Maybe.map Program.getStmtId
     }
 
 
@@ -46,3 +50,8 @@ addToMailbox message proc =
 setMailbox : List Message -> Proc -> Proc
 setMailbox mailbox proc =
     { proc | mailbox = mailbox }
+
+
+setCurrentStmtId : Maybe StmtId -> Proc -> Proc
+setCurrentStmtId stmtId proc =
+    { proc | currentStmtId = stmtId }

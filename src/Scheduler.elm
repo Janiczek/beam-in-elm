@@ -3,7 +3,7 @@ module Scheduler exposing (Scheduler, init, reductionsBudget, step)
 import Dict exposing (Dict)
 import PID exposing (PID)
 import Proc exposing (Proc, State(..))
-import Program exposing (Expr(..), Message, Program, Stmt(..))
+import Program exposing (Expr(..), Message, Program, Stmt(..), StmtId, getStmtId)
 import ReadyQueue exposing (ReadyQueue)
 import Trace exposing (Step(..))
 
@@ -112,11 +112,24 @@ stepProgram_ sch budget pid mailbox trace env program =
         let
             recur : Int -> Scheduler -> List Step -> Environment -> Program -> ( Scheduler, Program, List Step )
             recur workDone sch2 newTrace newEnv newProgram =
-                stepProgram_ sch2 (budget - workDone) pid mailbox (trace ++ newTrace) newEnv newProgram
+                let
+                    sch3 =
+                        updateCurrentStmtId newProgram sch2
+                in
+                stepProgram_ sch3 (budget - workDone) pid mailbox (trace ++ newTrace) newEnv newProgram
 
             recur1 : Scheduler -> List Step -> Environment -> Program -> ( Scheduler, Program, List Step )
             recur1 =
                 recur 1
+
+            updateCurrentStmtId : Program -> Scheduler -> Scheduler
+            updateCurrentStmtId newProgram sch2 =
+                let
+                    nextStmtId : Maybe StmtId
+                    nextStmtId =
+                        List.head newProgram |> Maybe.map Program.getStmtId
+                in
+                updateProc pid (Proc.setCurrentStmtId nextStmtId) sch2
         in
         case program of
             [] ->
@@ -124,7 +137,7 @@ stepProgram_ sch budget pid mailbox trace env program =
 
             stmt :: rest ->
                 case stmt of
-                    Work label amount ->
+                    Work stmtId label amount ->
                         let
                             workAmount =
                                 min amount budget
@@ -137,21 +150,21 @@ stepProgram_ sch budget pid mailbox trace env program =
                             -- Work is not complete, put remaining work back at front
                             let
                                 remainingWork =
-                                    Work label (amount - workAmount)
+                                    Work stmtId label (amount - workAmount)
                             in
                             ( sch
                             , remainingWork :: rest
                             , trace ++ [ DidWork { worker = pid, label = label, amount = workAmount } ]
                             )
 
-                    Let varName expr ->
+                    Let stmtId varName expr ->
                         let
                             ( sch2, value, trace1 ) =
                                 stepExpr sch pid env expr
                         in
                         recur1 sch2 trace1 (Dict.insert varName value env) rest
 
-                    SendMessage recipientExpr message ->
+                    SendMessage stmtId recipientExpr message ->
                         let
                             ( sch2, recipientPid, trace1 ) =
                                 stepExpr sch pid env recipientExpr
@@ -198,7 +211,7 @@ stepProgram_ sch budget pid mailbox trace env program =
                                 in
                                 recur1 sch3 (trace1 ++ [ DidSendMessageTo { worker = pid, recipient = recipientPid, message = message } ]) env rest
 
-                    Receive patterns ->
+                    Receive stmtId patterns ->
                         let
                             receive : List Message -> List Message -> ( Scheduler, Program, List Step )
                             receive revAcc restOfMailbox =
@@ -229,21 +242,21 @@ stepProgram_ sch budget pid mailbox trace env program =
                         in
                         receive [] mailbox
 
-                    ExprStmt expr ->
+                    ExprStmt stmtId expr ->
                         let
                             ( sch2, _, trace1 ) =
                                 stepExpr sch pid env expr
                         in
                         recur1 sch2 trace1 env rest
 
-                    End ->
+                    End stmtId ->
                         ( sch
                             |> updateProc pid (Proc.setState EndedNormally)
                         , []
                         , trace ++ [ DidEndNormally { worker = pid } ]
                         )
 
-                    Crash reason ->
+                    Crash stmtId reason ->
                         ( sch
                             |> updateProc pid (Proc.setState (Crashed reason))
                         , []

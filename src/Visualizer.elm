@@ -9,7 +9,7 @@ import Html.Events exposing (onClick, onInput)
 import List.NonEmpty.Zipper as Zipper exposing (Zipper)
 import PID exposing (PID)
 import Proc exposing (Proc, State(..))
-import Program exposing (example)
+import Program exposing (StmtId, example)
 import ReadyQueue exposing (ReadyQueue)
 import Scheduler exposing (Scheduler)
 import Task
@@ -189,7 +189,7 @@ viewScheduler : Scheduler -> Html msg
 viewScheduler scheduler =
     div [ style "display" "flex", style "flex-direction" "column", style "gap" "20px" ]
         [ div [ style "display" "flex", style "gap" "20px", style "align-items" "start" ]
-            [ viewProcesses scheduler.procs
+            [ viewProcesses scheduler.procs scheduler.readyQueue
             , viewReadyQueue scheduler.readyQueue
             ]
         , viewTraces (List.reverse scheduler.revTraces)
@@ -215,8 +215,8 @@ viewReadyQueue readyQueue =
         ]
 
 
-viewProcesses : Dict.Dict PID Proc -> Html msg
-viewProcesses procs =
+viewProcesses : Dict.Dict PID Proc -> ReadyQueue -> Html msg
+viewProcesses procs readyQueue =
     div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
         [ h3 [] [ text "Processes" ]
         , table
@@ -227,23 +227,32 @@ viewProcesses procs =
             ]
             [ thead []
                 [ tr []
-                    [ th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "5ch" ] [ text "PID" ]
-                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "20ch" ] [ text "State" ]
-                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "20ch" ] [ text "Mailbox" ]
-                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "40ch" ] [ text "Program" ]
+                    [ th [ style "padding" "8px", style "text-align" "left", style "background" "#f5f5f5", style "width" "5ch" ] [ text "PID" ]
+                    , th [ style "padding" "8px", style "text-align" "left", style "background" "#f5f5f5", style "width" "20ch" ] [ text "State" ]
+                    , th [ style "padding" "8px", style "text-align" "left", style "background" "#f5f5f5", style "width" "20ch" ] [ text "Mailbox" ]
+                    , th [ style "padding" "8px", style "text-align" "left", style "background" "#f5f5f5", style "width" "40ch" ] [ text "Program" ]
                     ]
                 ]
             , tbody []
                 (Dict.toList procs
-                    |> List.map viewProcessRow
+                    |> List.map (\procTuple -> viewProcessRow procTuple readyQueue)
                 )
             ]
         ]
 
 
-viewProcessRow : ( PID, Proc ) -> Html msg
-viewProcessRow ( pid, proc ) =
+viewProcessRow : ( PID, Proc ) -> ReadyQueue -> Html msg
+viewProcessRow ( pid, proc ) readyQueue =
     let
+        isNextToRun : Bool
+        isNextToRun =
+            case ReadyQueue.dequeue readyQueue of
+                Just ( nextPid, _ ) ->
+                    nextPid == pid
+
+                Nothing ->
+                    False
+
         stateColor : String
         stateColor =
             case proc.state of
@@ -258,8 +267,18 @@ viewProcessRow ( pid, proc ) =
 
                 Crashed _ ->
                     "red"
+
+        rowStyle : List (Html.Attribute msg)
+        rowStyle =
+            if isNextToRun then
+                [ style "border" "2px solid #0066cc"
+                , style "font-weight" "bold"
+                ]
+
+            else
+                []
     in
-    tr []
+    tr rowStyle
         [ td
             [ style "padding" "8px"
             , style "font-weight" "bold"
@@ -290,7 +309,7 @@ viewProcessRow ( pid, proc ) =
             [ style "padding" "8px"
             , style "background" stateColor
             ]
-            [ viewProgram proc.program ]
+            [ viewProgramWithHighlighting proc.originalProgram proc.program proc.currentStmtId ]
         ]
 
 
@@ -310,8 +329,8 @@ stateToString state =
             "Crashed: " ++ reason
 
 
-viewProgram : Program.Program -> Html msg
-viewProgram program =
+viewProgramWithHighlighting : Program.Program -> Program.Program -> Maybe Program.StmtId -> Html msg
+viewProgramWithHighlighting originalProgram currentProgram currentStmtId =
     let
         exprToString : Program.Expr -> String
         exprToString expr =
@@ -328,43 +347,208 @@ viewProgram program =
         stmtToString : Program.Stmt -> String
         stmtToString stmt =
             case stmt of
-                Program.Work label amount ->
+                Program.Work _ label amount ->
                     "Work: " ++ label ++ " (" ++ String.fromInt amount ++ " reductions)"
 
-                Program.Let varName expr ->
+                Program.Let _ varName expr ->
                     "Let " ++ varName ++ " = " ++ exprToString expr
 
-                Program.SendMessage recipientExpr message ->
+                Program.SendMessage _ recipientExpr message ->
                     "SendMessage(" ++ exprToString recipientExpr ++ ", \"" ++ message ++ "\")"
 
-                Program.Receive patterns ->
-                    "Receive (" ++ String.fromInt (List.length patterns) ++ " patterns)"
+                Program.Receive _ patterns ->
+                    let
+                        patternToString : { message : String, body : List Program.Stmt } -> String
+                        patternToString pattern =
+                            "  \""
+                                ++ pattern.message
+                                ++ "\" ->\n"
+                                ++ (pattern.body
+                                        |> List.map (\innerStmt -> "    " ++ stmtToString innerStmt)
+                                        |> String.join "\n"
+                                   )
 
-                Program.ExprStmt expr ->
+                        patternsText : String
+                        patternsText =
+                            patterns
+                                |> List.map patternToString
+                                |> String.join "\n"
+                    in
+                    "Receive:\n" ++ patternsText
+
+                Program.ExprStmt _ expr ->
                     "ExprStmt(" ++ exprToString expr ++ ")"
 
-                Program.End ->
+                Program.End _ ->
                     "End"
 
-                Program.Crash reason ->
+                Program.Crash _ reason ->
                     "Crash: " ++ reason
 
-        programText : String
-        programText =
-            if List.isEmpty program then
-                "Empty Program"
+        viewStmt : Program.Stmt -> Html msg
+        viewStmt stmt =
+            let
+                stmtId : Program.StmtId
+                stmtId =
+                    Program.getStmtId stmt
+
+                isCurrentLine : Bool
+                isCurrentLine =
+                    currentStmtId == Just stmtId
+
+                lineStyle : List (Html.Attribute msg)
+                lineStyle =
+                    if isCurrentLine then
+                        [ style "background-color" "#ffffcc"
+                        , style "font-weight" "bold"
+                        , style "padding" "2px 4px"
+                        , style "border-radius" "3px"
+                        ]
+
+                    else
+                        [ style "padding" "2px 4px" ]
+            in
+            case stmt of
+                Program.Receive _ patterns ->
+                    viewReceiveStmt stmtId patterns isCurrentLine
+
+                _ ->
+                    div lineStyle [ text (stmtToString stmt) ]
+
+        viewStmtWithRemainingWork : Program.Stmt -> Program.Program -> Html msg
+        viewStmtWithRemainingWork originalStmt currentProg =
+            case originalStmt of
+                Program.Work stmtId label originalAmount ->
+                    let
+                        remainingAmount : Int
+                        remainingAmount =
+                            findRemainingWorkAmount stmtId currentProgram
+                                |> Maybe.withDefault originalAmount
+
+                        workText : String
+                        workText =
+                            if remainingAmount == originalAmount then
+                                "Work: " ++ label ++ " (" ++ String.fromInt originalAmount ++ " reductions)"
+
+                            else
+                                "Work: " ++ label ++ " (" ++ String.fromInt remainingAmount ++ "/" ++ String.fromInt originalAmount ++ " reductions)"
+
+                        isCurrentLine : Bool
+                        isCurrentLine =
+                            currentStmtId == Just stmtId
+
+                        lineStyle : List (Html.Attribute msg)
+                        lineStyle =
+                            if isCurrentLine then
+                                [ style "background-color" "#ffffcc"
+                                , style "font-weight" "bold"
+                                , style "padding" "2px 4px"
+                                , style "border-radius" "3px"
+                                ]
+
+                            else
+                                [ style "padding" "2px 4px" ]
+                    in
+                    div lineStyle [ text workText ]
+
+                _ ->
+                    viewStmt originalStmt
+
+        findRemainingWorkAmount : Program.StmtId -> Program.Program -> Maybe Int
+        findRemainingWorkAmount targetStmtId program =
+            List.head
+                (List.filterMap
+                    (\stmt ->
+                        case stmt of
+                            Program.Work stmtId _ amount ->
+                                if stmtId == targetStmtId then
+                                    Just amount
+
+                                else
+                                    Nothing
+
+                            _ ->
+                                Nothing
+                    )
+                    program
+                )
+
+        viewReceiveStmt : Program.StmtId -> List { message : String, body : List Program.Stmt } -> Bool -> Html msg
+        viewReceiveStmt stmtId patterns isCurrentLine =
+            let
+                receiveHeaderStyle : List (Html.Attribute msg)
+                receiveHeaderStyle =
+                    if isCurrentLine then
+                        [ style "background-color" "#ffffcc"
+                        , style "font-weight" "bold"
+                        , style "padding" "2px 4px"
+                        , style "border-radius" "3px"
+                        ]
+
+                    else
+                        [ style "padding" "2px 4px" ]
+
+                viewPattern : { message : String, body : List Program.Stmt } -> List (Html msg)
+                viewPattern pattern =
+                    let
+                        patternHeader : Html msg
+                        patternHeader =
+                            div [ style "padding" "2px 4px", style "margin-left" "16px" ]
+                                [ text ("\"" ++ pattern.message ++ "\" ->") ]
+
+                        patternBody : List (Html msg)
+                        patternBody =
+                            pattern.body
+                                |> List.map
+                                    (\innerStmt ->
+                                        let
+                                            innerStmtId : Program.StmtId
+                                            innerStmtId =
+                                                Program.getStmtId innerStmt
+
+                                            isInnerCurrent : Bool
+                                            isInnerCurrent =
+                                                currentStmtId == Just innerStmtId
+
+                                            innerStyle : List (Html.Attribute msg)
+                                            innerStyle =
+                                                if isInnerCurrent then
+                                                    [ style "background-color" "#ffffcc"
+                                                    , style "font-weight" "bold"
+                                                    , style "padding" "2px 4px"
+                                                    , style "border-radius" "3px"
+                                                    , style "margin-left" "32px"
+                                                    ]
+
+                                                else
+                                                    [ style "padding" "2px 4px"
+                                                    , style "margin-left" "32px"
+                                                    ]
+                                        in
+                                        div innerStyle [ text ("  " ++ stmtToString innerStmt) ]
+                                    )
+                    in
+                    patternHeader :: patternBody
+            in
+            div []
+                (div receiveHeaderStyle [ text "Receive:" ]
+                    :: (patterns |> List.concatMap viewPattern)
+                )
+
+        programLines : List (Html msg)
+        programLines =
+            if List.isEmpty originalProgram then
+                [ div [ style "padding" "2px 4px" ] [ text "Empty Program" ] ]
 
             else
-                program
-                    |> List.map stmtToString
-                    |> String.join "\n"
+                List.map (\stmt -> viewStmtWithRemainingWork stmt currentProgram) originalProgram
     in
     div
         [ style "color" "#333"
         , style "font-size" "0.9em"
         , style "white-space" "pre"
         ]
-        [ text programText ]
+        programLines
 
 
 traceId : String
