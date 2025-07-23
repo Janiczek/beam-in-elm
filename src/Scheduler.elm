@@ -3,7 +3,7 @@ module Scheduler exposing (Scheduler, init, reductionsBudget, step)
 import Dict exposing (Dict)
 import PID exposing (PID)
 import Proc exposing (Proc, State(..))
-import Program exposing (Message, Program(..))
+import Program exposing (Expr(..), Message, Program, Stmt(..))
 import ReadyQueue exposing (ReadyQueue)
 import Trace exposing (Step(..))
 
@@ -17,6 +17,10 @@ type alias Scheduler =
     , revTraces : List (List Step)
     , reductionsBudget : Int
     }
+
+
+type alias Environment =
+    Dict String PID
 
 
 init : { reductionsBudget : Int, program : Program } -> Scheduler
@@ -62,7 +66,7 @@ step sch =
 
                 Just proc ->
                     let
-                        ( sch2, program2, revTrace ) =
+                        ( sch2, program2, trace ) =
                             stepProgram (sch |> setReadyQueue restOfQueue) sch.reductionsBudget pid proc
 
                         proc2 =
@@ -85,7 +89,7 @@ step sch =
                     in
                     sch2
                         |> updateProc pid (Proc.setProgram program2)
-                        |> log (List.reverse revTrace)
+                        |> log trace
                         |> (if shouldReenqueue then
                                 enqueue pid
 
@@ -96,150 +100,177 @@ step sch =
 
 stepProgram : Scheduler -> Int -> PID -> Proc -> ( Scheduler, Program, List Step )
 stepProgram sch budget pid proc =
-    stepProgram_ sch budget pid proc.mailbox [] proc.program
+    stepProgram_ sch budget pid proc.mailbox [] Dict.empty proc.program
 
 
-stepProgram_ : Scheduler -> Int -> PID -> List Message -> List Step -> Program -> ( Scheduler, Program, List Step )
-stepProgram_ sch budget pid mailbox revTrace program =
+stepProgram_ : Scheduler -> Int -> PID -> List Message -> List Step -> Environment -> Program -> ( Scheduler, Program, List Step )
+stepProgram_ sch budget pid mailbox trace env program =
     if budget <= 0 then
-        ( sch, program, revTrace )
+        ( sch, program, trace )
 
     else
         let
-            recur : Int -> Scheduler -> Step -> Program -> ( Scheduler, Program, List Step )
-            recur workDone sch2 newStep newProgram =
-                stepProgram_ sch2 (budget - workDone) pid mailbox (newStep :: revTrace) newProgram
+            recur : Int -> Scheduler -> List Step -> Environment -> Program -> ( Scheduler, Program, List Step )
+            recur workDone sch2 newTrace newEnv newProgram =
+                stepProgram_ sch2 (budget - workDone) pid mailbox (trace ++ newTrace) newEnv newProgram
 
-            recur1 : Scheduler -> Step -> Program -> ( Scheduler, Program, List Step )
+            recur1 : Scheduler -> List Step -> Environment -> Program -> ( Scheduler, Program, List Step )
             recur1 =
                 recur 1
         in
         case program of
-            Work label amount k ->
-                case compare amount budget of
-                    LT ->
-                        -- do this work _and then some_
-                        recur amount
-                            sch
-                            (DidWork { worker = pid, label = label, amount = amount })
-                            (k ())
+            [] ->
+                ( sch, [], trace )
 
-                    EQ ->
-                        -- finish doing this work then yield
-                        recur amount
-                            sch
-                            (DidWork { worker = pid, label = label, amount = amount })
-                            (k ())
-
-                    GT ->
-                        -- do only a part of this work
-                        recur budget
-                            sch
-                            (DidWork { worker = pid, label = label, amount = budget })
-                            (Work label (amount - budget) k)
-
-            GetSelfPid kp ->
-                recur1 sch (DidGetSelfPid { worker = pid }) (kp pid)
-
-            SendMessage recipientPid message k ->
-                case Dict.get recipientPid sch.procs of
-                    Nothing ->
-                        -- TODO: we might want to throw an error in this process instead?
-                        recur1 sch
-                            (DidTryToSendMessageToNonexistentPid { worker = pid, recipient = recipientPid, message = message })
-                            (k ())
-
-                    Just recipientProc ->
+            stmt :: rest ->
+                case stmt of
+                    Work label amount ->
                         let
-                            shouldEnqueue =
-                                case recipientProc.state of
-                                    WaitingForMsg ->
-                                        True
-
-                                    ReadyToRun ->
-                                        False
-
-                                    EndedNormally ->
-                                        False
-
-                                    Crashed _ ->
-                                        False
-
-                            newRecipientProc =
-                                recipientProc
-                                    |> Proc.addToMailbox message
-                                    |> (if shouldEnqueue then
-                                            Proc.setState ReadyToRun
-
-                                        else
-                                            identity
-                                       )
+                            workAmount =
+                                min amount budget
                         in
-                        recur1
-                            (sch
-                                |> setProc recipientPid newRecipientProc
-                                |> (if shouldEnqueue then
-                                        enqueue recipientPid
+                        if workAmount == amount then
+                            -- Work is complete, continue with rest
+                            recur workAmount sch [ DidWork { worker = pid, label = label, amount = workAmount } ] env rest
 
-                                    else
-                                        identity
-                                   )
+                        else
+                            -- Work is not complete, put remaining work back at front
+                            let
+                                remainingWork =
+                                    Work label (amount - workAmount)
+                            in
+                            ( sch
+                            , remainingWork :: rest
+                            , trace ++ [ DidWork { worker = pid, label = label, amount = workAmount } ]
                             )
-                            (DidSendMessageTo { worker = pid, recipient = recipientPid, message = message })
-                            (k ())
 
-            Receive km ->
-                -- TODO: should mailbox be a queue? zipper would make sense too, see below
-                -- TODO PERF: hold tried unsuccessful msgs so we don't retry them on every msg?
-                let
-                    receive : List Message -> List Message -> ( Scheduler, Program, List Step )
-                    receive revAcc restOfMailbox =
-                        case restOfMailbox of
-                            [] ->
-                                -- didn't find the matching message
-                                ( sch
-                                    |> updateProc pid (Proc.setState WaitingForMsg)
-                                , program
-                                , DidTryToReceiveUnsuccessfully { worker = pid } :: revTrace
-                                )
+                    Let varName expr ->
+                        let
+                            ( sch2, value, trace1 ) =
+                                stepExpr sch pid env expr
+                        in
+                        recur1 sch2 trace1 (Dict.insert varName value env) rest
 
-                            m :: ms ->
-                                case km m of
-                                    Nothing ->
-                                        -- TODO: make these loops consume red.budget too?
-                                        receive (m :: revAcc) ms
+                    SendMessage recipientExpr message ->
+                        let
+                            ( sch2, recipientPid, trace1 ) =
+                                stepExpr sch pid env recipientExpr
+                        in
+                        case Dict.get recipientPid sch2.procs of
+                            Nothing ->
+                                recur1 sch2 (trace1 ++ [ DidTryToSendMessageToNonexistentPid { worker = pid, recipient = recipientPid, message = message } ]) env rest
 
-                                    Just program2 ->
+                            Just recipientProc ->
+                                let
+                                    shouldEnqueue =
+                                        case recipientProc.state of
+                                            WaitingForMsg ->
+                                                True
+
+                                            ReadyToRun ->
+                                                False
+
+                                            EndedNormally ->
+                                                False
+
+                                            Crashed _ ->
+                                                False
+
+                                    newRecipientProc =
+                                        recipientProc
+                                            |> Proc.addToMailbox message
+                                            |> (if shouldEnqueue then
+                                                    Proc.setState ReadyToRun
+
+                                                else
+                                                    identity
+                                               )
+
+                                    sch3 =
+                                        sch2
+                                            |> setProc recipientPid newRecipientProc
+                                            |> (if shouldEnqueue then
+                                                    enqueue recipientPid
+
+                                                else
+                                                    identity
+                                               )
+                                in
+                                recur1 sch3 (trace1 ++ [ DidSendMessageTo { worker = pid, recipient = recipientPid, message = message } ]) env rest
+
+                    Receive patterns ->
+                        let
+                            receive : List Message -> List Message -> ( Scheduler, Program, List Step )
+                            receive revAcc restOfMailbox =
+                                case restOfMailbox of
+                                    [] ->
+                                        -- didn't find the matching message
                                         let
                                             sch2 =
                                                 sch
-                                                    |> updateProc pid
-                                                        (Proc.setMailbox (List.reverse revAcc ++ ms))
+                                                    |> updateProc pid (Proc.setState WaitingForMsg)
                                         in
-                                        recur1 sch2 (DidReceiveMsg { worker = pid, message = m }) program2
-                in
-                receive [] mailbox
+                                        ( sch2, program, trace ++ [ DidTryToReceiveUnsuccessfully { worker = pid } ] )
 
-            Spawn childProgram_ kp ->
-                let
-                    ( sch2, newPid ) =
-                        sch |> spawn childProgram_
-                in
-                recur1 sch2 (DidSpawn { worker = pid, child = newPid }) (kp newPid)
+                                    m :: ms ->
+                                        case findMatchingPattern m patterns of
+                                            Nothing ->
+                                                -- TODO: make these loops consume red.budget too?
+                                                receive (m :: revAcc) ms
 
-            End ->
-                ( sch
-                    |> updateProc pid (Proc.setState EndedNormally)
-                , End
-                , DidEndNormally { worker = pid } :: revTrace
-                )
+                                            Just matchingPattern ->
+                                                let
+                                                    sch2 =
+                                                        sch
+                                                            |> updateProc pid
+                                                                (Proc.setMailbox (List.reverse revAcc ++ ms))
+                                                in
+                                                recur1 sch2 [ DidReceiveMsg { worker = pid, message = m } ] env (matchingPattern.body ++ rest)
+                        in
+                        receive [] mailbox
 
-            Crash reason ->
-                ( sch
-                    |> updateProc pid (Proc.setState (Crashed reason))
-                , Crash reason
-                , DidCrash { worker = pid, reason = reason } :: revTrace
-                )
+                    ExprStmt expr ->
+                        let
+                            ( sch2, _, trace1 ) =
+                                stepExpr sch pid env expr
+                        in
+                        recur1 sch2 trace1 env rest
+
+                    End ->
+                        ( sch
+                            |> updateProc pid (Proc.setState EndedNormally)
+                        , []
+                        , trace ++ [ DidEndNormally { worker = pid } ]
+                        )
+
+                    Crash reason ->
+                        ( sch
+                            |> updateProc pid (Proc.setState (Crashed reason))
+                        , []
+                        , trace ++ [ DidCrash { worker = pid, reason = reason } ]
+                        )
+
+
+stepExpr : Scheduler -> PID -> Environment -> Expr -> ( Scheduler, PID, List Step )
+stepExpr sch pid env expr =
+    case expr of
+        GetSelfPid ->
+            ( sch, pid, [ DidGetSelfPid { worker = pid } ] )
+
+        Spawn childProgram_ ->
+            let
+                ( sch2, newPid ) =
+                    spawn childProgram_ sch
+            in
+            ( sch2, newPid, [ DidSpawn { worker = pid, child = newPid } ] )
+
+        Var varName ->
+            ( sch, Dict.get varName env |> Maybe.withDefault 0, [] )
+
+
+findMatchingPattern : Message -> List { message : String, body : Program } -> Maybe { message : String, body : Program }
+findMatchingPattern msg patterns =
+    List.head (List.filter (\pattern -> pattern.message == msg) patterns)
 
 
 spawn : Program -> Scheduler -> ( Scheduler, PID )

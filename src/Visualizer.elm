@@ -13,7 +13,7 @@ import Program exposing (example)
 import ReadyQueue exposing (ReadyQueue)
 import Scheduler exposing (Scheduler)
 import Task
-import Trace exposing (Step(..))
+import Trace exposing (Step(..), Trace)
 
 
 type alias Model =
@@ -313,29 +313,39 @@ stateToString state =
 viewProgram : Program.Program -> Html msg
 viewProgram program =
     let
-        programText : String
-        programText =
-            case program of
-                Program.Work label amount _ ->
+        stmtToString : Program.Stmt -> String
+        stmtToString stmt =
+            case stmt of
+                Program.Work label amount ->
                     "Work: " ++ label ++ " (" ++ String.fromInt amount ++ " reductions)"
 
-                Program.GetSelfPid _ ->
-                    "GetSelfPid"
+                Program.Let varName expr ->
+                    "Let " ++ varName
 
-                Program.SendMessage recipientPid message _ ->
-                    "SendMessage to PID " ++ String.fromInt recipientPid ++ ": " ++ message
+                Program.SendMessage recipientExpr message ->
+                    "SendMessage: " ++ message
 
-                Program.Receive _ ->
-                    "Receive"
+                Program.Receive patterns ->
+                    "Receive (" ++ String.fromInt (List.length patterns) ++ " patterns)"
 
-                Program.Spawn _ _ ->
-                    "Spawn"
+                Program.ExprStmt expr ->
+                    "ExprStmt"
 
                 Program.End ->
                     "End"
 
                 Program.Crash reason ->
                     "Crash: " ++ reason
+
+        programText : String
+        programText =
+            if List.isEmpty program then
+                "Empty Program"
+
+            else
+                program
+                    |> List.map stmtToString
+                    |> String.join "; "
     in
     div
         [ style "color" "#333" ]
@@ -347,7 +357,7 @@ traceId =
     "trace"
 
 
-viewTraces : List (List Step) -> Html msg
+viewTraces : List Trace -> Html msg
 viewTraces traces =
     div
         [ style "display" "flex"
