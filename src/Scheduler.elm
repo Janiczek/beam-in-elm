@@ -1,4 +1,4 @@
-module Scheduler exposing (Scheduler, init, reductionsBudget, step)
+module Scheduler exposing (Scheduler, getRemainingWork, init, reductionsBudget, step)
 
 import Dict exposing (Dict)
 import PID exposing (PID)
@@ -16,6 +16,7 @@ type alias Scheduler =
     , nextUnusedPid : PID
     , revTraces : List (List Step)
     , reductionsBudget : Int
+    , remainingWork : Dict StmtId Int
     }
 
 
@@ -30,6 +31,7 @@ init r =
     , nextUnusedPid = 0
     , revTraces = []
     , reductionsBudget = r.reductionsBudget
+    , remainingWork = Dict.empty
     }
         |> spawn r.program
         |> Tuple.first
@@ -143,16 +145,26 @@ stepProgram_ sch budget pid mailbox trace env program =
                                 min amount budget
                         in
                         if workAmount == amount then
-                            -- Work is complete, continue with rest
-                            recur workAmount sch [ DidWork { worker = pid, label = label, amount = workAmount } ] env rest
+                            -- Work is complete, remove from tracking and continue with rest
+                            let
+                                sch2 =
+                                    { sch | remainingWork = Dict.remove stmtId sch.remainingWork }
+                            in
+                            recur workAmount sch2 [ DidWork { worker = pid, label = label, amount = workAmount } ] env rest
 
                         else
-                            -- Work is not complete, put remaining work back at front
+                            -- Work is not complete, update tracking and put remaining work back at front
                             let
+                                remainingAmount =
+                                    amount - workAmount
+
+                                sch2 =
+                                    { sch | remainingWork = Dict.insert stmtId remainingAmount sch.remainingWork }
+
                                 remainingWork =
-                                    Work stmtId label (amount - workAmount)
+                                    Work stmtId label remainingAmount
                             in
-                            ( sch
+                            ( sch2
                             , remainingWork :: rest
                             , trace ++ [ DidWork { worker = pid, label = label, amount = workAmount } ]
                             )
@@ -324,6 +336,11 @@ setReadyQueue readyQueue scheduler =
 log : List Step -> Scheduler -> Scheduler
 log trace scheduler =
     { scheduler | revTraces = trace :: scheduler.revTraces }
+
+
+getRemainingWork : StmtId -> Scheduler -> Maybe Int
+getRemainingWork stmtId scheduler =
+    Dict.get stmtId scheduler.remainingWork
 
 
 reductionsBudget : Scheduler -> Int
