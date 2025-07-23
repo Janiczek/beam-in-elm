@@ -313,6 +313,18 @@ stateToString state =
 viewProgram : Program.Program -> Html msg
 viewProgram program =
     let
+        exprToString : Program.Expr -> String
+        exprToString expr =
+            case expr of
+                Program.GetSelfPid ->
+                    "GetSelfPid"
+
+                Program.Spawn childProgram_ ->
+                    "Spawn(...)"
+
+                Program.Var varName ->
+                    varName
+
         stmtToString : Program.Stmt -> String
         stmtToString stmt =
             case stmt of
@@ -320,16 +332,16 @@ viewProgram program =
                     "Work: " ++ label ++ " (" ++ String.fromInt amount ++ " reductions)"
 
                 Program.Let varName expr ->
-                    "Let " ++ varName
+                    "Let " ++ varName ++ " = " ++ exprToString expr
 
                 Program.SendMessage recipientExpr message ->
-                    "SendMessage: " ++ message
+                    "SendMessage(" ++ exprToString recipientExpr ++ ", \"" ++ message ++ "\")"
 
                 Program.Receive patterns ->
                     "Receive (" ++ String.fromInt (List.length patterns) ++ " patterns)"
 
                 Program.ExprStmt expr ->
-                    "ExprStmt"
+                    "ExprStmt(" ++ exprToString expr ++ ")"
 
                 Program.End ->
                     "End"
@@ -345,10 +357,13 @@ viewProgram program =
             else
                 program
                     |> List.map stmtToString
-                    |> String.join "; "
+                    |> String.join "\n"
     in
     div
-        [ style "color" "#333" ]
+        [ style "color" "#333"
+        , style "font-size" "0.9em"
+        , style "white-space" "pre"
+        ]
         [ text programText ]
 
 
