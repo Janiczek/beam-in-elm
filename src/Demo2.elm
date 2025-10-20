@@ -1,4 +1,4 @@
-module Demo1 exposing (main)
+module Demo2 exposing (main)
 
 import Browser
 import Browser.Dom as Dom
@@ -6,7 +6,7 @@ import Scheduler exposing (Pid, Proc, Scheduler, Step(..))
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick)
+import Html.Events exposing (onClick, onInput)
 import List.NonEmpty.Zipper as Zipper exposing (Zipper)
 import Queue exposing (Queue)
 import Task
@@ -35,10 +35,20 @@ type Msg
 
 init : () -> ( Model, Cmd Msg )
 init () =
+    initDefault
+
+
+initDefault : ( Model, Cmd Msg )
+initDefault =
+    initWithProgram Scheduler.ex2
+
+
+initWithProgram : Scheduler.Program -> ( Model, Cmd Msg )
+initWithProgram program =
     let
         initialScheduler : Scheduler
         initialScheduler =
-            Scheduler.init { reductionsBudget = 1, program = Scheduler.ex1 }
+            Scheduler.init { program = program, reductionsBudget = 100 }
     in
     ( { history = Zipper.singleton initialScheduler }
     , Cmd.none
@@ -167,14 +177,7 @@ update msg model =
                     ( model, Cmd.none )
 
         Reset ->
-            let
-                initialScheduler : Scheduler
-                initialScheduler =
-                    Scheduler.init { reductionsBudget = 1, program = Scheduler.ex1 }
-            in
-            ( { model | history = Zipper.singleton initialScheduler }
-            , Cmd.none
-            )
+            initDefault
 
         HasScrolledToBottomOfTrace _ ->
             ( model, Cmd.none )
@@ -196,7 +199,7 @@ view model =
             not (isFinished currentScheduler)
     in
     div [ style "padding" "20px", style "font-family" "monospace" ]
-        [ h1 [] [ text "Demo 1: End" ]
+        [ h1 [] [ text "Demo 2: Work" ]
         , div [ style "display" "flex", style "flex-direction" "column", style "gap" "20px" ]
             [ div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
                 [ div [ style "display" "flex", style "gap" "10px", style "align-items" "center" ]
@@ -236,6 +239,7 @@ viewScheduler scheduler =
         ]
 
 
+
 viewProgram : Scheduler -> Html msg
 viewProgram scheduler =
     let
@@ -250,6 +254,8 @@ viewProgram scheduler =
 
                         Scheduler.End ->
                             "End"
+                        Scheduler.Work amount _ ->
+                            "Work: " ++ String.fromInt amount
                         _ -> "Shouldn't show at this point yet"
 
         processState : ProcessState
@@ -286,6 +292,7 @@ viewProgram scheduler =
             , div [ style "margin-top" "5px" ] [ text programText ]
             ]
         ]
+
 
 
 viewTraces : List (List Step) -> Html msg
@@ -333,9 +340,44 @@ traceId =
 stepToString : Step -> String
 stepToString step =
     case step of
+        DidWork { amount } ->
+            "Did work: " ++ String.fromInt amount
+
+        DidSendMessageTo { worker, recipient, message } ->
+            "PID " ++ String.fromInt worker ++ " sent message to PID " ++ String.fromInt recipient ++ ": " ++ message
+
+        DidTryToSendMessageToNonexistentPid { worker, recipient, message } ->
+            "PID " ++ String.fromInt worker ++ " tried to send message to nonexistent PID " ++ String.fromInt recipient ++ ": " ++ message
+
+        DidReceiveMsg { worker, message } ->
+            "PID " ++ String.fromInt worker ++ " received message: " ++ message
+
+        DidTryToReceiveUnsuccessfully { worker } ->
+            "PID " ++ String.fromInt worker ++ " tried to receive but no matching message found"
+
+        DidSpawn { worker, child } ->
+            "PID " ++ String.fromInt worker ++ " spawned child PID " ++ String.fromInt child
+
+        DidLink { worker, linked } ->
+            "PID " ++ String.fromInt worker ++ " linked to PID " ++ String.fromInt linked
+
+        DidUnsuccessfullyTryToLink { worker, linked } ->
+            "PID " ++ String.fromInt worker ++ " tried to link to PID " ++ String.fromInt linked ++ " (unsuccessfully)"
+
+        DidSpawnLink { worker, child } ->
+            "PID " ++ String.fromInt worker ++ " spawned and linked child PID " ++ String.fromInt child
+
         DidEndNormally _ ->
             "Ended normally"
-        _ -> "Shouldn't show at this point yet"
+
+        DidCrash { worker } ->
+            "PID " ++ String.fromInt worker ++ " crashed"
+
+        DidTryToRunNonexistentProcess { process } ->
+            "Tried to run nonexistent process PID " ++ String.fromInt process
+
+        NothingInTheReadyQueue ->
+            "Nothing in the ready queue"
 
 
 isFinished : Scheduler -> Bool

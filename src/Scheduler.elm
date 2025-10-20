@@ -1,4 +1,16 @@
-module Scheduler exposing (Pid, Proc, Program(..), Scheduler, Step(..), ex1, ex7, ex7b, init, step)
+module Scheduler exposing
+    ( Scheduler, Step(..), Program(..), Proc, Pid
+    , init, step
+    , ex1, ex2, ex7, ex7b
+    )
+
+{-|
+
+@docs Scheduler, Step, Program, Proc, Pid
+@docs init, step
+@docs ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex7b
+
+-}
 
 import Dict exposing (Dict)
 import Queue exposing (Queue)
@@ -94,6 +106,13 @@ ex7b =
 ex1 : Program
 ex1 =
     End
+
+
+ex2 : Program
+ex2 =
+    Work 5 <|
+        \() ->
+            End
 
 
 init : { reductionsBudget : Int, program : Program } -> Scheduler

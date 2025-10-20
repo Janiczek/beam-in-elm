@@ -220,7 +220,7 @@ view model =
             not (isFinished currentScheduler)
     in
     div [ style "padding" "20px", style "font-family" "monospace" ]
-        [ h1 [] [ text "Scheduler Visualizer" ]
+        [ h1 [] [ text "Demo 7: Link, Crash and a surprise" ]
         , div [ style "display" "flex", style "flex-direction" "column", style "gap" "20px" ]
             [ div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
                 [ div [ style "display" "flex", style "gap" "10px", style "align-items" "center" ]
