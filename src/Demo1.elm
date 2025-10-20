@@ -1,8 +1,8 @@
-module Demo1.Visualizer exposing (main)
+module Demo1 exposing (main)
 
 import Browser
 import Browser.Dom as Dom
-import Demo7.Scheduler as Scheduler exposing (Pid, Proc, Scheduler, Step(..))
+import Scheduler exposing (Pid, Proc, Scheduler, Step(..))
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)

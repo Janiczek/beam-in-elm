@@ -1,4 +1,4 @@
-module Demo7.Scheduler exposing (Pid, Proc, Program(..), Scheduler, Step(..), ex1, ex7, ex7b, init, step)
+module Scheduler exposing (Pid, Proc, Program(..), Scheduler, Step(..), ex1, ex7, ex7b, init, step)
 
 import Dict exposing (Dict)
 import Queue exposing (Queue)
