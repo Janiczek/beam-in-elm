@@ -1,19 +1,24 @@
-module Visualizer exposing (main)
+module Demo7.Visualizer exposing (main)
 
 import Browser
 import Browser.Dom as Dom
+import Demo7.Scheduler as Scheduler exposing (Pid, Proc, Scheduler, Step(..))
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 import List.NonEmpty.Zipper as Zipper exposing (Zipper)
-import PID exposing (PID)
-import Proc exposing (Proc, State(..))
-import Program exposing (example)
-import ReadyQueue exposing (ReadyQueue)
-import Scheduler exposing (Scheduler)
+import Queue exposing (Queue)
 import Task
-import Trace exposing (Step(..))
+
+
+type ProcessState
+    = ReadyToRun
+    | WaitingForMsg
+    | EndedNormally
+    | Crashed
+    | InQueue
+    | Zombie
 
 
 type alias Model =
@@ -26,6 +31,7 @@ type Msg
     = StepForward
     | StepBackward
     | Reset
+    | FixBug
     | UpdateBudget String
     | ResetWithBudget Int
     | HasScrolledToBottomOfTrace (Result Dom.Error ())
@@ -38,19 +44,104 @@ init () =
 
 initWithBudget : Int -> ( Model, Cmd Msg )
 initWithBudget budget =
+    initWithBudgetAndProgram budget Scheduler.ex7
+
+
+initWithBudgetAndProgram : Int -> Scheduler.Program -> ( Model, Cmd Msg )
+initWithBudgetAndProgram budget program =
     let
         initialScheduler : Scheduler
         initialScheduler =
-            Scheduler.init
-                { reductionsBudget = budget
-                , program = example
-                }
+            Scheduler.init { reductionsBudget = budget, program = program }
     in
     ( { history = Zipper.singleton initialScheduler
       , budget = String.fromInt budget
       }
     , Cmd.none
     )
+
+
+deriveProcessState : Scheduler -> Pid -> Proc -> ProcessState
+deriveProcessState scheduler pid proc =
+    let
+        isFirstInQueue : Bool
+        isFirstInQueue =
+            Queue.front scheduler.readyQueue == Just pid
+
+        isInQueue : Bool
+        isInQueue =
+            Queue.toList scheduler.readyQueue
+                |> List.member pid
+    in
+    if isFirstInQueue then
+        ReadyToRun
+
+    else if isInQueue then
+        InQueue
+
+    else if proc.program == Scheduler.End then
+        EndedNormally
+
+    else if proc.program == Scheduler.Crash then
+        Crashed
+
+    else if isReceive proc.program then
+        WaitingForMsg
+
+    else
+        Zombie
+
+
+isReceive : Scheduler.Program -> Bool
+isReceive program =
+    case program of
+        Scheduler.Receive _ ->
+            True
+
+        _ ->
+            False
+
+
+processStateToColor : ProcessState -> String
+processStateToColor state =
+    case state of
+        ReadyToRun ->
+            "greenyellow"
+
+        WaitingForMsg ->
+            "orange"
+
+        EndedNormally ->
+            "lightgray"
+
+        Crashed ->
+            "red"
+
+        InQueue ->
+            "transparent"
+        Zombie ->
+            "cyan"
+
+
+processStateToText : ProcessState -> String
+processStateToText state =
+    case state of
+        ReadyToRun ->
+            "Will run next"
+
+        WaitingForMsg ->
+            "Waiting for message"
+
+        EndedNormally ->
+            "Ended normally"
+
+        Crashed ->
+            "Crashed"
+
+        InQueue ->
+            "In queue"
+        Zombie ->
+            "Zombie (bug?)"
 
 
 jumpToBottom : String -> Cmd Msg
@@ -96,6 +187,12 @@ update msg model =
                 |> String.toInt
                 |> Maybe.withDefault 1
                 |> initWithBudget
+
+        FixBug ->
+            model.budget
+                |> String.toInt
+                |> Maybe.withDefault 1
+                |> (\budget -> initWithBudgetAndProgram budget Scheduler.ex7b)
 
         UpdateBudget budgetStr ->
             ( { model | budget = budgetStr }, Cmd.none )
@@ -144,6 +241,11 @@ view model =
                         , style "padding" "8px 16px"
                         ]
                         [ text "Reset" ]
+                    , button
+                        [ onClick FixBug
+                        , style "padding" "8px 16px"
+                        ]
+                        [ text "Fix the bug" ]
                     , div
                         [ style "display" "flex"
                         , style "align-items" "center"
@@ -178,7 +280,7 @@ view model =
                 , div [ style "color" "#666" ]
                     [ text ("Step " ++ String.fromInt (List.length (Zipper.listPrev model.history) + 1)) ]
                 , div [ style "color" "#666" ]
-                    [ text ("Used budget: " ++ String.fromInt (Scheduler.reductionsBudget currentScheduler)) ]
+                    [ text ("Used budget: " ++ String.fromInt currentScheduler.reductionsBudget) ]
                 ]
             , viewScheduler currentScheduler
             ]
@@ -189,19 +291,19 @@ viewScheduler : Scheduler -> Html msg
 viewScheduler scheduler =
     div [ style "display" "flex", style "flex-direction" "column", style "gap" "20px" ]
         [ div [ style "display" "flex", style "gap" "20px", style "align-items" "start" ]
-            [ viewProcesses scheduler.procs
+            [ viewProcesses scheduler
             , viewReadyQueue scheduler.readyQueue
             ]
         , viewTraces (List.reverse scheduler.revTraces)
         ]
 
 
-viewReadyQueue : ReadyQueue -> Html msg
+viewReadyQueue : Queue Pid -> Html msg
 viewReadyQueue readyQueue =
     let
         queueItems : List String
         queueItems =
-            ReadyQueue.toList readyQueue |> List.map String.fromInt
+            Queue.toList readyQueue |> List.map String.fromInt
     in
     div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
         [ h3 [] [ text "Ready Queue (top = next to run)" ]
@@ -215,8 +317,8 @@ viewReadyQueue readyQueue =
         ]
 
 
-viewProcesses : Dict.Dict PID Proc -> Html msg
-viewProcesses procs =
+viewProcesses : Scheduler -> Html msg
+viewProcesses scheduler =
     div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
         [ h3 [] [ text "Processes" ]
         , table
@@ -234,30 +336,27 @@ viewProcesses procs =
                     ]
                 ]
             , tbody []
-                (Dict.toList procs
-                    |> List.map viewProcessRow
+                (Dict.toList scheduler.procs
+                    |> List.map (viewProcessRow scheduler)
                 )
             ]
         ]
 
 
-viewProcessRow : ( PID, Proc ) -> Html msg
-viewProcessRow ( pid, proc ) =
+viewProcessRow : Scheduler -> ( Pid, Proc ) -> Html msg
+viewProcessRow scheduler ( pid, proc ) =
     let
+        processState : ProcessState
+        processState =
+            deriveProcessState scheduler pid proc
+
         stateColor : String
         stateColor =
-            case proc.state of
-                ReadyToRun ->
-                    "greenyellow"
+            processStateToColor processState
 
-                WaitingForMsg ->
-                    "orange"
-
-                EndedNormally ->
-                    "lightgray"
-
-                Crashed _ ->
-                    "red"
+        stateText : String
+        stateText =
+            processStateToText processState
     in
     tr []
         [ td
@@ -270,7 +369,7 @@ viewProcessRow ( pid, proc ) =
             [ style "padding" "8px"
             , style "background" stateColor
             ]
-            [ text (stateToString proc.state) ]
+            [ text stateText ]
         , td
             [ style "padding" "8px"
             , style "background" stateColor
@@ -294,57 +393,39 @@ viewProcessRow ( pid, proc ) =
         ]
 
 
-stateToString : State -> String
-stateToString state =
-    case state of
-        ReadyToRun ->
-            "Ready to Run"
-
-        WaitingForMsg ->
-            "Waiting for Message"
-
-        EndedNormally ->
-            "Ended Normally"
-
-        Crashed reason ->
-            "Crashed: " ++ reason
-
-
-viewProgram : Program.Program -> Html msg
+viewProgram : Scheduler.Program -> Html msg
 viewProgram program =
     let
         programText : String
         programText =
             case program of
-                Program.Work label amount _ ->
-                    "Work: " ++ label ++ " (" ++ String.fromInt amount ++ " reductions)"
+                Scheduler.Work amount _ ->
+                    "Work: " ++ String.fromInt amount ++ " reductions"
 
-                Program.GetSelfPid _ ->
-                    "GetSelfPid"
-
-                Program.SendMessage recipientPid message _ ->
-                    "SendMessage to PID " ++ String.fromInt recipientPid ++ ": " ++ message
-
-                Program.Receive _ ->
-                    "Receive"
-
-                Program.Spawn _ _ ->
-                    "Spawn"
-
-                Program.End ->
+                Scheduler.End ->
                     "End"
 
-                Program.Crash reason ->
-                    "Crash: " ++ reason
+                Scheduler.Spawn _ _ ->
+                    "Spawn"
+
+                Scheduler.Send recipientPid message _ ->
+                    "Send to PID " ++ String.fromInt recipientPid ++ ": " ++ message
+
+                Scheduler.Receive ( expectedMessage, _ ) ->
+                    "Receive: " ++ expectedMessage
+
+                Scheduler.Crash ->
+                    "Crash"
+
+                Scheduler.Link targetPid _ ->
+                    "Link to PID " ++ String.fromInt targetPid
+
+                Scheduler.SpawnLink _ _ ->
+                    "SpawnLink"
     in
     div
         [ style "color" "#333" ]
         [ text programText ]
-
-
-traceId : String
-traceId =
-    "trace"
 
 
 viewTraces : List (List Step) -> Html msg
@@ -384,14 +465,16 @@ viewTraces traces =
         ]
 
 
+traceId : String
+traceId =
+    "trace"
+
+
 stepToString : Step -> String
 stepToString step =
     case step of
-        DidWork { worker, label, amount } ->
-            "PID " ++ String.fromInt worker ++ " did work: " ++ label ++ " (" ++ String.fromInt amount ++ " reductions)"
-
-        DidGetSelfPid { worker } ->
-            "PID " ++ String.fromInt worker ++ " got self PID"
+        DidWork { worker, amount } ->
+            "PID " ++ String.fromInt worker ++ " did work: " ++ String.fromInt amount ++ " reductions"
 
         DidSendMessageTo { worker, recipient, message } ->
             "PID " ++ String.fromInt worker ++ " sent message to PID " ++ String.fromInt recipient ++ ": " ++ message
@@ -408,11 +491,20 @@ stepToString step =
         DidSpawn { worker, child } ->
             "PID " ++ String.fromInt worker ++ " spawned child PID " ++ String.fromInt child
 
+        DidLink { worker, linked } ->
+            "PID " ++ String.fromInt worker ++ " linked to PID " ++ String.fromInt linked
+
+        DidUnsuccessfullyTryToLink { worker, linked } ->
+            "PID " ++ String.fromInt worker ++ " tried to link to PID " ++ String.fromInt linked ++ " (unsuccessfully)"
+
+        DidSpawnLink { worker, child } ->
+            "PID " ++ String.fromInt worker ++ " spawned and linked child PID " ++ String.fromInt child
+
         DidEndNormally { worker } ->
             "PID " ++ String.fromInt worker ++ " ended normally"
 
-        DidCrash { worker, reason } ->
-            "PID " ++ String.fromInt worker ++ " crashed: " ++ reason
+        DidCrash { worker } ->
+            "PID " ++ String.fromInt worker ++ " crashed"
 
         DidTryToRunNonexistentProcess { process } ->
             "Tried to run nonexistent process PID " ++ String.fromInt process
@@ -423,15 +515,15 @@ stepToString step =
 
 isFinished : Scheduler -> Bool
 isFinished scheduler =
-    case ReadyQueue.dequeue scheduler.readyQueue of
-        Nothing ->
+    case Queue.dequeue scheduler.readyQueue of
+        ( Nothing, _ ) ->
             True
 
-        Just _ ->
+        ( Just _, _ ) ->
             False
 
 
-main : Program () Model Msg
+main : Platform.Program () Model Msg
 main =
     Browser.element
         { init = init
