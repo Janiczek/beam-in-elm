@@ -1,12 +1,12 @@
 module Scheduler exposing
-    ( Scheduler, Step(..), Program(..), Proc, Pid
+    ( Scheduler, Step(..), Program(..), Proc, Pid, WorkType(..)
     , init, step
-    , ex1, ex2, ex7, ex7b
+    , ex1, ex2, ex3, ex7, ex7b
     )
 
 {-|
 
-@docs Scheduler, Step, Program, Proc, Pid
+@docs Scheduler, Step, Program, Proc, Pid, WorkType
 @docs init, step
 @docs ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex7b
 
@@ -17,12 +17,17 @@ import Queue exposing (Queue)
 import Set exposing (Set)
 
 
+type WorkType
+    = AllAtOnce
+    | ReductionsBudget Int
+
+
 type alias Scheduler =
     { procs : Dict Pid Proc
     , nextUnusedPid : Pid
     , readyQueue : Queue Pid
     , revTraces : List (List Step)
-    , reductionsBudget : Int
+    , workType : WorkType
     }
 
 
@@ -115,13 +120,26 @@ ex2 =
             End
 
 
-init : { reductionsBudget : Int, program : Program } -> Scheduler
+ex3 : Program
+ex3 =
+    Work 5         <| \() ->
+    Spawn ex3Child <| \childPid ->
+    Work 5         <| \() ->
+    End
+
+ex3Child : Program
+ex3Child =
+    Work 10 <| \() ->
+    Work 10 <| \() ->
+    End
+
+init : { workType : WorkType, program : Program } -> Scheduler
 init r =
     { procs = Dict.empty
     , nextUnusedPid = 0
     , readyQueue = Queue.empty
     , revTraces = []
-    , reductionsBudget = r.reductionsBudget
+    , workType = r.workType
     }
         |> spawn r.program
         |> Tuple.first
@@ -216,34 +234,67 @@ step sch =
 
                 Just proc ->
                     newSch
-                        |> stepInner pid proc sch.reductionsBudget
+                        |> stepInner pid proc sch.workType
 
 
-stepInner : Pid -> Proc -> Int -> Scheduler -> Scheduler
-stepInner pid proc budget sch =
-    if budget <= 0 then
-        sch
-            |> setProc pid proc
-            |> (if shouldEnqueue proc then
-                    enqueue pid
+stepInner : Pid -> Proc -> WorkType -> Scheduler -> Scheduler
+stepInner pid proc workType sch =
+    case workType of
+        ReductionsBudget budget ->
+            if budget <= 0 then
+                sch
+                    |> setProc pid proc
+                    |> (if shouldEnqueue proc then
+                            enqueue pid
 
-                else
-                    identity
-               )
+                        else
+                            identity
+                       )
 
-    else
-        let
-            stop : Scheduler -> Scheduler
-            stop sch_ =
-                sch_
-                    |> stepInner pid proc 0
+            else
+                let
+                    stop : Scheduler -> Scheduler
+                    stop sch_ =
+                        sch_
+                            |> stepInner pid proc (ReductionsBudget 0)
 
-            continueWith : Proc -> Program -> Int -> Scheduler -> Scheduler
-            continueWith newProc newProgram newBudget sch_ =
-                sch_
-                    |> stepInner pid (newProc |> setProcProgram newProgram) newBudget
-        in
-        case proc.program of
+                    continueWith : Proc -> Program -> Int -> Scheduler -> Scheduler
+                    continueWith newProc newProgram newBudget sch_ =
+                        sch_
+                            |> stepInner pid (newProc |> setProcProgram newProgram) (ReductionsBudget newBudget)
+                in
+                stepInnerWithBudget pid proc budget sch stop continueWith
+
+        AllAtOnce ->
+            let
+                stop : Scheduler -> Scheduler
+                stop sch_ =
+                    sch_
+                        |> setProc pid proc
+                        |> (if shouldEnqueue proc then
+                                enqueue pid
+
+                            else
+                                identity
+                           )
+
+                continueWith : Proc -> Program -> Int -> Scheduler -> Scheduler
+                continueWith newProc newProgram _ sch_ =
+                    sch_
+                        |> setProc pid (newProc |> setProcProgram newProgram)
+                        |> (if shouldEnqueue (newProc |> setProcProgram newProgram) then
+                                enqueue pid
+
+                            else
+                                identity
+                           )
+            in
+            stepInnerAllAtOnce pid proc sch stop continueWith
+
+
+stepInnerWithBudget : Pid -> Proc -> Int -> Scheduler -> (Scheduler -> Scheduler) -> (Proc -> Program -> Int -> Scheduler -> Scheduler) -> Scheduler
+stepInnerWithBudget pid proc budget sch stop continueWith =
+    case proc.program of
             End ->
                 sch
                     |> log [ DidEndNormally { worker = pid } ]
@@ -358,6 +409,112 @@ stepInner pid proc budget sch =
                 schWithLink
                     |> log [ DidSpawnLink { worker = pid, child = childPid } ]
                     |> continueWith newProc newProgram (budget - 1)
+
+
+stepInnerAllAtOnce : Pid -> Proc -> Scheduler -> (Scheduler -> Scheduler) -> (Proc -> Program -> Int -> Scheduler -> Scheduler) -> Scheduler
+stepInnerAllAtOnce pid proc sch stop continueWith =
+    case proc.program of
+        End ->
+            sch
+                |> log [ DidEndNormally { worker = pid } ]
+                |> stop
+
+        Work n k ->
+            -- For AllAtOnce, complete all work in one step
+            sch
+                |> log [ DidWork { worker = pid, amount = n } ]
+                |> continueWith proc (k ()) 0
+
+        Spawn childProgram kpid ->
+            -- For AllAtOnce, complete spawn and then preempt
+            let
+                ( schWithChild, childPid ) =
+                    sch |> spawn childProgram
+
+                newProgram =
+                    kpid childPid
+            in
+            schWithChild
+                |> log [ DidSpawn { worker = pid, child = childPid } ]
+                |> continueWith proc newProgram 0
+
+        Send destinationPid message k ->
+            sch
+                |> send destinationPid message
+                |> log [ DidSendMessageTo { worker = pid, recipient = destinationPid, message = message } ]
+                |> continueWith proc (k ()) 0
+
+        Receive ( branch, k ) ->
+            let
+                processMessages : List String -> List String -> Scheduler
+                processMessages unmatchedStartRev restOfMailbox =
+                    case restOfMailbox of
+                        [] ->
+                            sch
+                                |> log [ DidTryToReceiveUnsuccessfully { worker = pid } ]
+                                |> stop
+
+                        message :: rest ->
+                            if branch == message then
+                                let
+                                    newMailbox =
+                                        List.reverse unmatchedStartRev ++ rest
+                                in
+                                sch
+                                    |> log [ DidReceiveMsg { worker = pid, message = message } ]
+                                    |> continueWith (proc |> setMailbox newMailbox) (k ()) 0
+
+                            else
+                                processMessages (message :: unmatchedStartRev) rest
+            in
+            processMessages [] proc.mailbox
+
+        Crash ->
+            sch
+                |> log [ DidCrash { worker = pid } ]
+                |> propagateCrashToLinks pid
+                |> stop
+
+        Link linkedPid k ->
+            let
+                ( schWithLink, wasSuccessful ) =
+                    sch
+                        |> link pid linkedPid
+
+                newProc =
+                    schWithLink.procs
+                        |> Dict.get pid
+                        |> Maybe.withDefault proc
+            in
+            schWithLink
+                |> (if wasSuccessful then
+                        log [ DidLink { worker = pid, linked = linkedPid } ]
+
+                    else
+                        log [ DidUnsuccessfullyTryToLink { worker = pid, linked = linkedPid } ]
+                   )
+                |> continueWith newProc (k ()) 0
+
+        SpawnLink childProgram kpid ->
+            let
+                ( schWithChild, childPid ) =
+                    sch |> spawn childProgram
+
+                ( schWithLink, _ ) =
+                    schWithChild
+                        |> link pid childPid
+
+                newProc =
+                    schWithLink.procs
+                        |> Dict.get pid
+                        |> Maybe.withDefault proc
+
+                newProgram =
+                    kpid childPid
+            in
+            schWithLink
+                |> log [ DidSpawnLink { worker = pid, child = childPid } ]
+                |> continueWith newProc newProgram 0
 
 
 propagateCrashToLinks : Pid -> Scheduler -> Scheduler

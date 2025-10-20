@@ -2,7 +2,7 @@ module Demo2 exposing (main)
 
 import Browser
 import Browser.Dom as Dom
-import Scheduler exposing (Pid, Proc, Scheduler, Step(..))
+import Scheduler exposing (Pid, Proc, Scheduler, Step(..), WorkType(..))
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -48,7 +48,7 @@ initWithProgram program =
     let
         initialScheduler : Scheduler
         initialScheduler =
-            Scheduler.init { program = program, reductionsBudget = 100 }
+            Scheduler.init { program = program, workType = AllAtOnce }
     in
     ( { history = Zipper.singleton initialScheduler }
     , Cmd.none

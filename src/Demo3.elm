@@ -1,4 +1,4 @@
-module Demo7 exposing (main)
+module Demo3 exposing (main)
 
 import Browser
 import Browser.Dom as Dom
@@ -23,7 +23,6 @@ type ProcessState
 
 type alias Model =
     { history : Zipper Scheduler
-    , budget : String
     }
 
 
@@ -31,41 +30,23 @@ type Msg
     = StepForward
     | StepBackward
     | Reset
-    | FixBug
-    | UpdateBudget String
-    | ResetWithBudget Int
     | HasScrolledToBottomOfTrace (Result Dom.Error ())
-
-
-workTypeToString : WorkType -> String
-workTypeToString workType =
-    case workType of
-        AllAtOnce ->
-            ""
-
-        ReductionsBudget budget ->
-            "Used budget: " ++ String.fromInt budget
 
 
 init : () -> ( Model, Cmd Msg )
 init () =
-    initWithBudget 1
+    initWithProgram Scheduler.ex3
 
 
-initWithBudget : Int -> ( Model, Cmd Msg )
-initWithBudget budget =
-    initWithBudgetAndProgram budget Scheduler.ex7
 
-
-initWithBudgetAndProgram : Int -> Scheduler.Program -> ( Model, Cmd Msg )
-initWithBudgetAndProgram budget program =
+initWithProgram : Scheduler.Program -> ( Model, Cmd Msg )
+initWithProgram program =
     let
         initialScheduler : Scheduler
         initialScheduler =
-            Scheduler.init { workType = ReductionsBudget budget, program = program }
+            Scheduler.init { workType = AllAtOnce, program = program }
     in
     ( { history = Zipper.singleton initialScheduler
-      , budget = String.fromInt budget
       }
     , Cmd.none
     )
@@ -193,22 +174,8 @@ update msg model =
                     ( model, Cmd.none )
 
         Reset ->
-            model.budget
-                |> String.toInt
-                |> Maybe.withDefault 1
-                |> initWithBudget
+                init ()
 
-        FixBug ->
-            model.budget
-                |> String.toInt
-                |> Maybe.withDefault 1
-                |> (\budget -> initWithBudgetAndProgram budget Scheduler.ex7b)
-
-        UpdateBudget budgetStr ->
-            ( { model | budget = budgetStr }, Cmd.none )
-
-        ResetWithBudget budgetInt ->
-            initWithBudget budgetInt
 
         HasScrolledToBottomOfTrace _ ->
             ( model, Cmd.none )
@@ -230,7 +197,7 @@ view model =
             not (isFinished currentScheduler)
     in
     div [ style "padding" "20px", style "font-family" "monospace" ]
-        [ h1 [] [ text "Demo 7: Link, Crash and a surprise" ]
+        [ h1 [] [ text "Demo 3: Spawn" ]
         , div [ style "display" "flex", style "flex-direction" "column", style "gap" "20px" ]
             [ div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
                 [ div [ style "display" "flex", style "gap" "10px", style "align-items" "center" ]
@@ -251,46 +218,9 @@ view model =
                         , style "padding" "8px 16px"
                         ]
                         [ text "Reset" ]
-                    , button
-                        [ onClick FixBug
-                        , style "padding" "8px 16px"
-                        ]
-                        [ text "Fix the bug" ]
-                    , div
-                        [ style "display" "flex"
-                        , style "align-items" "center"
-                        , style "gap" "5px"
-                        ]
-                        [ label [] [ text "Budget:" ]
-                        , input
-                            [ value model.budget
-                            , onInput UpdateBudget
-                            , style "width" "60px"
-                            , style "padding" "4px"
-                            , style "font-family" "monospace"
-                            , type_ "number"
-                            ]
-                            []
-                        , button
-                            [ case String.toInt model.budget of
-                                Just budget ->
-                                    if budget >= 1 then
-                                        onClick (ResetWithBudget budget)
-
-                                    else
-                                        disabled True
-
-                                Nothing ->
-                                    disabled True
-                            , style "padding" "8px 16px"
-                            ]
-                            [ text "Reset with budget" ]
-                        ]
                     ]
                 , div [ style "color" "#666" ]
                     [ text ("Step " ++ String.fromInt (List.length (Zipper.listPrev model.history) + 1)) ]
-                , div [ style "color" "#666" ]
-                    [ text (workTypeToString currentScheduler.workType) ]
                 ]
             , viewScheduler currentScheduler
             ]
@@ -341,7 +271,6 @@ viewProcesses scheduler =
                 [ tr []
                     [ th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "5ch" ] [ text "PID" ]
                     , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "20ch" ] [ text "State" ]
-                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "20ch" ] [ text "Mailbox" ]
                     , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "40ch" ] [ text "Program" ]
                     ]
                 ]
@@ -384,21 +313,6 @@ viewProcessRow scheduler ( pid, proc ) =
             [ style "padding" "8px"
             , style "background" stateColor
             ]
-            [ if List.isEmpty proc.mailbox then
-                text "Empty"
-
-              else
-                div
-                    [ style "display" "flex"
-                    , style "flex-direction" "column"
-                    , style "gap" "2px"
-                    ]
-                    (List.map (\message -> div [] [ text ("- " ++ message) ]) proc.mailbox)
-            ]
-        , td
-            [ style "padding" "8px"
-            , style "background" stateColor
-            ]
             [ viewProgram proc.program ]
         ]
 
@@ -410,7 +324,7 @@ viewProgram program =
         programText =
             case program of
                 Scheduler.Work amount _ ->
-                    "Work: " ++ String.fromInt amount ++ " reductions"
+                    "Work: " ++ String.fromInt amount
 
                 Scheduler.End ->
                     "End"
@@ -484,43 +398,20 @@ stepToString : Step -> String
 stepToString step =
     case step of
         DidWork { worker, amount } ->
-            "PID " ++ String.fromInt worker ++ " did work: " ++ String.fromInt amount ++ " reductions"
-
-        DidSendMessageTo { worker, recipient, message } ->
-            "PID " ++ String.fromInt worker ++ " sent message to PID " ++ String.fromInt recipient ++ ": " ++ message
-
-        DidTryToSendMessageToNonexistentPid { worker, recipient, message } ->
-            "PID " ++ String.fromInt worker ++ " tried to send message to nonexistent PID " ++ String.fromInt recipient ++ ": " ++ message
-
-        DidReceiveMsg { worker, message } ->
-            "PID " ++ String.fromInt worker ++ " received message: " ++ message
-
-        DidTryToReceiveUnsuccessfully { worker } ->
-            "PID " ++ String.fromInt worker ++ " tried to receive but no matching message found"
+            "PID " ++ String.fromInt worker ++ " did work: " ++ String.fromInt amount
 
         DidSpawn { worker, child } ->
             "PID " ++ String.fromInt worker ++ " spawned child PID " ++ String.fromInt child
 
-        DidLink { worker, linked } ->
-            "PID " ++ String.fromInt worker ++ " linked to PID " ++ String.fromInt linked
-
-        DidUnsuccessfullyTryToLink { worker, linked } ->
-            "PID " ++ String.fromInt worker ++ " tried to link to PID " ++ String.fromInt linked ++ " (unsuccessfully)"
-
-        DidSpawnLink { worker, child } ->
-            "PID " ++ String.fromInt worker ++ " spawned and linked child PID " ++ String.fromInt child
-
         DidEndNormally { worker } ->
             "PID " ++ String.fromInt worker ++ " ended normally"
-
-        DidCrash { worker } ->
-            "PID " ++ String.fromInt worker ++ " crashed"
 
         DidTryToRunNonexistentProcess { process } ->
             "Tried to run nonexistent process PID " ++ String.fromInt process
 
         NothingInTheReadyQueue ->
             "Nothing in the ready queue"
+        _ -> "Shouldn't show at this point yet"
 
 
 isFinished : Scheduler -> Bool
