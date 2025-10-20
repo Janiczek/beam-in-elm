@@ -1,4 +1,4 @@
-module Demo7.Scheduler exposing (Pid, Proc, Program(..), Scheduler, Step(..), ex7, ex7b, init, step)
+module Demo7.Scheduler exposing (Pid, Proc, Program(..), Scheduler, Step(..), ex1, ex7, ex7b, init, step)
 
 import Dict exposing (Dict)
 import Queue exposing (Queue)
@@ -89,6 +89,11 @@ ex7b =
                 ( "CRASH: " ++ String.fromInt childPid
                 , \() -> End
                 )
+
+
+ex1 : Program
+ex1 =
+    End
 
 
 init : { reductionsBudget : Int, program : Program } -> Scheduler
