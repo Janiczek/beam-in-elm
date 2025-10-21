@@ -83,10 +83,10 @@ type Step
 -- Example program
 
 
-
 ex1 : Program
 ex1 =
     End
+
 
 code1 : String
 code1 =
@@ -101,65 +101,75 @@ ex2 =
         \() ->
             End
 
+
 code2 : String
 code2 =
     """
     ex2 =
-        Work 5 <| \\() ->
+        Work 5
         End
     """
 
+
 ex3 : Program
 ex3 =
-    Work 5         <| \() ->
-    Spawn ex3Child <| \childPid ->
-    Work 5         <| \() ->
-    End
+    Work 5 <|
+        \() ->
+            Spawn ex3Child <|
+                \childPid ->
+                    Work 5 <|
+                        \() ->
+                            End
+
 
 code3 : String
 code3 =
     """
     ex3 =
-        Work 5         <| \\() ->
-        Spawn ex3Child <| \\childPid ->
-        Work 5         <| \\() ->
+        Work 5
+        Spawn ex3Child
+        Work 5
         End
 
     ex3Child =
-        Work 10 <| \\() ->
-        Work 10 <| \\() ->
+        Work 10
+        Work 10
         End
     """
 
+
 ex3Child : Program
 ex3Child =
-    Work 10 <| \() ->
-    Work 10 <| \() ->
-    End
+    Work 10 <|
+        \() ->
+            Work 10 <|
+                \() ->
+                    End
 
 
 ex7 : Program
 ex7 =
-    Spawn ex7Child <| \childPid ->
-    Link childPid <| \() ->
-    Receive
-        ( "CRASH: " ++ String.fromInt childPid
-        , \() -> End
-        )
+    Spawn ex7Child <|
+        \childPid ->
+            Link childPid <|
+                \() ->
+                    Receive
+                        ( "CRASH: " ++ String.fromInt childPid
+                        , \() -> End
+                        )
+
 
 code7 : String
 code7 =
     """
     ex7 =
-        Spawn ex7Child <| \\childPid ->
-        Link childPid <| \\() ->
-        Receive
-            ( "CRASH: " ++ String.fromInt childPid
-            , \\() -> End
-            )
+        childPid = Spawn ex7Child
+        Link childPid
+        Receive ("CRASH: " ++ childPid) -> End
 
     ex7Child = Crash
     """
+
 
 ex7Child : Program
 ex7Child =
@@ -180,14 +190,12 @@ code7b : String
 code7b =
     """
     ex7b =
-        SpawnLink ex7Child <| \childPid ->
-        Receive
-            ( "CRASH: " ++ String.fromInt childPid
-            , \() -> End
-            )
+        childPid = SpawnLink ex7Child
+        Receive ("CRASH: " ++ childPid) -> End
 
     ex7Child = Crash
     """
+
 
 init : { workType : WorkType, program : Program } -> Scheduler
 init r =
@@ -351,120 +359,127 @@ stepInner pid proc workType sch =
 stepInnerWithBudget : Pid -> Proc -> Int -> Scheduler -> (Scheduler -> Scheduler) -> (Proc -> Program -> Int -> Scheduler -> Scheduler) -> Scheduler
 stepInnerWithBudget pid proc budget sch stop continueWith =
     case proc.program of
-            End ->
+        End ->
+            sch
+                |> log [ DidEndNormally { worker = pid } ]
+                |> stop
+
+        Work n k ->
+            if n <= 0 then
                 sch
-                    |> log [ DidEndNormally { worker = pid } ]
-                    |> stop
+                    |> continueWith proc (k ()) budget
 
-            Work n k ->
-                if n <= 0 then
-                    sch
-                        |> continueWith proc (k ()) budget
-
-                else
-                    let
-                        workDone =
-                            min n budget
-
-                        workRemaining =
-                            n - workDone
-
-                        budgetRemaining =
-                            budget - workDone
-                    in
-                    sch
-                        |> log [ DidWork { worker = pid, amount = workDone } ]
-                        |> continueWith proc (Work workRemaining k) budgetRemaining
-
-            Spawn childProgram kpid ->
+            else
                 let
-                    ( schWithChild, childPid ) =
-                        sch |> spawn childProgram
+                    workDone =
+                        min n budget
 
-                    newProgram =
-                        kpid childPid
+                    workRemaining =
+                        n - workDone
+
+                    budgetRemaining =
+                        budget - workDone
                 in
-                schWithChild
-                    |> log [ DidSpawn { worker = pid, child = childPid } ]
-                    |> continueWith proc newProgram (budget - 1)
-
-            Send destinationPid message k ->
                 sch
-                    |> send destinationPid message
-                    |> log [ DidSendMessageTo { worker = pid, recipient = destinationPid, message = message } ]
-                    |> continueWith proc (k ()) (budget - 1)
+                    |> log [ DidWork { worker = pid, amount = workDone } ]
+                    |> continueWith proc (Work workRemaining k) budgetRemaining
 
-            Receive ( branch, k ) ->
-                let
-                    processMessages : List String -> List String -> Scheduler
-                    processMessages unmatchedStartRev restOfMailbox =
-                        case restOfMailbox of
-                            [] ->
+        Spawn childProgram kpid ->
+            let
+                ( schWithChild, childPid ) =
+                    sch |> spawn childProgram
+
+                newProgram =
+                    kpid childPid
+            in
+            schWithChild
+                |> log [ DidSpawn { worker = pid, child = childPid } ]
+                |> continueWith proc newProgram (budget - 1)
+
+        Send destinationPid message k ->
+            sch
+                |> send destinationPid message
+                |> log [ DidSendMessageTo { worker = pid, recipient = destinationPid, message = message } ]
+                |> continueWith proc (k ()) (budget - 1)
+
+        Receive ( branch, k ) ->
+            let
+                processMessages : List String -> List String -> Scheduler
+                processMessages unmatchedStartRev restOfMailbox =
+                    case restOfMailbox of
+                        [] ->
+                            sch
+                                |> log [ DidTryToReceiveUnsuccessfully { worker = pid } ]
+                                |> stop
+
+                        message :: rest ->
+                            if branch == message then
+                                let
+                                    newMailbox =
+                                        List.reverse unmatchedStartRev ++ rest
+                                in
                                 sch
-                                    |> log [ DidTryToReceiveUnsuccessfully { worker = pid } ]
-                                    |> stop
+                                    |> log [ DidReceiveMsg { worker = pid, message = message } ]
+                                    |> continueWith (proc |> setMailbox newMailbox) (k ()) (budget - 1)
 
-                            message :: rest ->
-                                if branch == message then
-                                    let
-                                        newMailbox =
-                                            List.reverse unmatchedStartRev ++ rest
-                                    in
-                                    sch
-                                        |> log [ DidReceiveMsg { worker = pid, message = message } ]
-                                        |> continueWith (proc |> setMailbox newMailbox) (k ()) (budget - 1)
+                            else
+                                processMessages (message :: unmatchedStartRev) rest
+            in
+            processMessages [] proc.mailbox
 
-                                else
-                                    processMessages (message :: unmatchedStartRev) rest
-                in
-                processMessages [] proc.mailbox
+        Crash ->
+            sch
+                |> log [ DidCrash { worker = pid } ]
+                |> propagateCrashToLinks pid
+                |> stop
 
-            Crash ->
-                sch
-                    |> log [ DidCrash { worker = pid } ]
-                    |> propagateCrashToLinks pid
-                    |> stop
+        Link linkedPid k ->
+            let
+                ( schWithLink, wasSuccessful ) =
+                    sch
+                        |> link pid linkedPid
 
-            Link linkedPid k ->
-                let
-                    ( schWithLink, wasSuccessful ) =
-                        sch
-                            |> link pid linkedPid
+                newProc =
+                    schWithLink.procs
+                        |> Dict.get pid
+                        |> Maybe.withDefault proc
+            in
+            schWithLink
+                |> (if wasSuccessful then
+                        log [ DidLink { worker = pid, linked = linkedPid } ]
 
-                    newProc =
-                        schWithLink.procs
-                            |> Dict.get pid
-                            |> Maybe.withDefault proc
-                in
-                schWithLink
-                    |> (if wasSuccessful then
-                            log [ DidLink { worker = pid, linked = linkedPid } ]
+                    else
+                        log [ DidUnsuccessfullyTryToLink { worker = pid, linked = linkedPid } ]
+                   )
+                |> continueWith newProc
+                    (if wasSuccessful then
+                        k ()
 
-                        else
-                            log [ DidUnsuccessfullyTryToLink { worker = pid, linked = linkedPid } ]
-                       )
-                    |> continueWith newProc (k ()) (budget - 1)
+                     else
+                        Crash
+                    )
+                    (budget - 1)
 
-            SpawnLink childProgram kpid ->
-                let
-                    ( schWithChild, childPid ) =
-                        sch |> spawn childProgram
+        SpawnLink childProgram kpid ->
+            let
+                ( schWithChild, childPid ) =
+                    sch |> spawn childProgram
 
-                    ( schWithLink, _ ) =
-                        schWithChild
-                            |> link pid childPid
+                ( schWithLink, _ ) =
+                    schWithChild
+                        |> link pid childPid
 
-                    newProc =
-                        schWithLink.procs
-                            |> Dict.get pid
-                            |> Maybe.withDefault proc
+                newProc =
+                    schWithLink.procs
+                        |> Dict.get pid
+                        |> Maybe.withDefault proc
 
-                    newProgram =
-                        kpid childPid
-                in
-                schWithLink
-                    |> log [ DidSpawnLink { worker = pid, child = childPid } ]
-                    |> continueWith newProc newProgram (budget - 1)
+                newProgram =
+                    kpid childPid
+            in
+            schWithLink
+                |> log [ DidSpawnLink { worker = pid, child = childPid } ]
+                |> continueWith newProc newProgram (budget - 1)
 
 
 stepInnerAllAtOnce : Pid -> Proc -> Scheduler -> (Scheduler -> Scheduler) -> (Proc -> Program -> Int -> Scheduler -> Scheduler) -> Scheduler
