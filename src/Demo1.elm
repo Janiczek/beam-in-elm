@@ -80,6 +80,7 @@ view model =
         , codeExample = Scheduler.code1
         , additionalControls = []
         , additionalInfo = []
+        , budgetControls = Nothing
         }
 
 

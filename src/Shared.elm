@@ -27,7 +27,7 @@ import Browser.Dom as Dom
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick)
+import Html.Events exposing (onClick, onInput)
 import List.NonEmpty.Zipper as Zipper exposing (Zipper)
 import Queue exposing (Queue)
 import Scheduler exposing (Pid, Proc, Scheduler, Step(..))
@@ -631,6 +631,8 @@ viewDemoLayout :
     , codeExample : String
     , additionalControls : List (Html msg)
     , additionalInfo : List (Html msg)
+    , budgetControls : Maybe { resetWithBudget : Int -> msg
+    , updateBudget : String -> msg, budgetField : String }
     }
     -> Html msg
 viewDemoLayout config =
@@ -691,6 +693,43 @@ viewDemoLayout config =
                         [ text "Reset" ]
                      ]
                         ++ config.additionalControls
+                        ++ (case config.budgetControls of
+                                Just budgetConfig ->
+                                    [ div
+                                        [ style "display" "flex"
+                                        , style "align-items" "center"
+                                        , style "gap" "5px"
+                                        ]
+                                        [ label [] [ text "Budget:" ]
+                                        , input
+                                            [ value budgetConfig.budgetField
+                                            , onInput budgetConfig.updateBudget
+                                            , style "width" "60px"
+                                            , style "padding" "4px"
+                                            , style "font-family" "monospace"
+                                            , type_ "number"
+                                            ]
+                                            []
+                                        , button
+                                            [ case String.toInt budgetConfig.budgetField of
+                                                Just budget ->
+                                                    if budget >= 1 then
+                                                        onClick (budgetConfig.resetWithBudget budget)
+
+                                                    else
+                                                        disabled True
+
+                                                Nothing ->
+                                                    disabled True
+                                            , style "padding" "8px 16px"
+                                            ]
+                                            [ text "Reset with budget" ]
+                                        ]
+                                    ]
+
+                                Nothing ->
+                                    []
+                           )
                     )
                  , div
                     [ style "color" "#666" ]

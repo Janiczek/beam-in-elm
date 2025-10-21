@@ -4,9 +4,9 @@ import Browser
 import Browser.Dom
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (onClick)
 import List.NonEmpty.Zipper as Zipper exposing (Zipper)
-import Scheduler exposing (Scheduler, Step(..), WorkType(..), code7, code7b)
+import Scheduler exposing (Scheduler, Step(..), WorkType(..))
 import Shared exposing (ProcessState(..), SchedulerViewMode(..))
 
 
@@ -64,18 +64,16 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         StepForward ->
-            let
-                updatedModel =
-                    Shared.handleStepForward model
-            in
-            ( updatedModel, Shared.jumpToBottomOfTraces |> Cmd.map HasScrolledToBottomOfTrace )
+            ( Shared.handleStepForward model
+            , Shared.jumpToBottomOfTraces
+                |> Cmd.map HasScrolledToBottomOfTrace
+            )
 
         StepBackward ->
-            let
-                updatedModel =
-                    Shared.handleStepBackward model
-            in
-            ( updatedModel, Shared.jumpToBottomOfTraces |> Cmd.map HasScrolledToBottomOfTrace )
+            ( Shared.handleStepBackward model
+            , Shared.jumpToBottomOfTraces
+                |> Cmd.map HasScrolledToBottomOfTrace
+            )
 
         Reset ->
             model.budget
@@ -120,36 +118,6 @@ view model =
                 , style "padding" "8px 16px"
                 ]
                 [ text "Fix the bug" ]
-            , div
-                [ style "display" "flex"
-                , style "align-items" "center"
-                , style "gap" "5px"
-                ]
-                [ label [] [ text "Budget:" ]
-                , input
-                    [ value model.budget
-                    , onInput UpdateBudget
-                    , style "width" "60px"
-                    , style "padding" "4px"
-                    , style "font-family" "monospace"
-                    , type_ "number"
-                    ]
-                    []
-                , button
-                    [ case String.toInt model.budget of
-                        Just budget ->
-                            if budget >= 1 then
-                                onClick (ResetWithBudget budget)
-
-                            else
-                                disabled True
-
-                        Nothing ->
-                            disabled True
-                    , style "padding" "8px 16px"
-                    ]
-                    [ text "Reset with budget" ]
-                ]
             ]
 
         additionalInfo : List (Html Msg)
@@ -166,9 +134,20 @@ view model =
         , reset = Reset
         , history = model.history
         , schedulerMode = Shared.ProcessTableWithMailbox
-        , codeExample = if model.isFixedVersion then code7b else code7
+        , codeExample =
+            if model.isFixedVersion then
+                Scheduler.code7b
+
+            else
+                Scheduler.code7
         , additionalControls = additionalControls
         , additionalInfo = additionalInfo
+        , budgetControls =
+            Just
+                { resetWithBudget = ResetWithBudget
+                , updateBudget = UpdateBudget
+                , budgetField = model.budget
+                }
         }
 
 
