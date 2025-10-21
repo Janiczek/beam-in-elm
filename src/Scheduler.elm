@@ -2,6 +2,7 @@ module Scheduler exposing
     ( Scheduler, Step(..), Program(..), Proc, Pid, WorkType(..)
     , init, step
     , ex1, ex2, ex3, ex7, ex7b
+    , code1, code2, code3, code7, code7b
     )
 
 {-|
@@ -9,6 +10,7 @@ module Scheduler exposing
 @docs Scheduler, Step, Program, Proc, Pid, WorkType
 @docs init, step
 @docs ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex7b
+@docs code1, code2, code3, code4, code5, code6, code7, code7b
 
 -}
 
@@ -81,17 +83,83 @@ type Step
 -- Example program
 
 
+
+ex1 : Program
+ex1 =
+    End
+
+code1 : String
+code1 =
+    """
+    ex1 = End
+    """
+
+
+ex2 : Program
+ex2 =
+    Work 5 <|
+        \() ->
+            End
+
+code2 : String
+code2 =
+    """
+    ex2 =
+        Work 5 <| \\() ->
+        End
+    """
+
+ex3 : Program
+ex3 =
+    Work 5         <| \() ->
+    Spawn ex3Child <| \childPid ->
+    Work 5         <| \() ->
+    End
+
+code3 : String
+code3 =
+    """
+    ex3 =
+        Work 5         <| \\() ->
+        Spawn ex3Child <| \\childPid ->
+        Work 5         <| \\() ->
+        End
+
+    ex3Child =
+        Work 10 <| \\() ->
+        Work 10 <| \\() ->
+        End
+    """
+
+ex3Child : Program
+ex3Child =
+    Work 10 <| \() ->
+    Work 10 <| \() ->
+    End
+
+
 ex7 : Program
 ex7 =
-    Spawn ex7Child <|
-        \childPid ->
-            Link childPid <|
-                \() ->
-                    Receive
-                        ( "CRASH: " ++ String.fromInt childPid
-                        , \() -> End
-                        )
+    Spawn ex7Child <| \childPid ->
+    Link childPid <| \() ->
+    Receive
+        ( "CRASH: " ++ String.fromInt childPid
+        , \() -> End
+        )
 
+code7 : String
+code7 =
+    """
+    ex7 =
+        Spawn ex7Child <| \\childPid ->
+        Link childPid <| \\() ->
+        Receive
+            ( "CRASH: " ++ String.fromInt childPid
+            , \\() -> End
+            )
+
+    ex7Child = Crash
+    """
 
 ex7Child : Program
 ex7Child =
@@ -108,30 +176,18 @@ ex7b =
                 )
 
 
-ex1 : Program
-ex1 =
-    End
+code7b : String
+code7b =
+    """
+    ex7b =
+        SpawnLink ex7Child <| \childPid ->
+        Receive
+            ( "CRASH: " ++ String.fromInt childPid
+            , \() -> End
+            )
 
-
-ex2 : Program
-ex2 =
-    Work 5 <|
-        \() ->
-            End
-
-
-ex3 : Program
-ex3 =
-    Work 5         <| \() ->
-    Spawn ex3Child <| \childPid ->
-    Work 5         <| \() ->
-    End
-
-ex3Child : Program
-ex3Child =
-    Work 10 <| \() ->
-    Work 10 <| \() ->
-    End
+    ex7Child = Crash
+    """
 
 init : { workType : WorkType, program : Program } -> Scheduler
 init r =
