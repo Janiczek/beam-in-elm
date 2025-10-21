@@ -1,8 +1,8 @@
 module Scheduler exposing
     ( Scheduler, Step(..), Program(..), Proc, Pid, WorkType(..)
-    , init, step
-    , ex1, ex2, ex3, ex7, ex7b
-    , code1, code2, code3, code7, code7b
+    , init, step, currentBudget
+    , ex1, ex2, ex3, ex4, ex7, ex7b
+    , code1, code2, code3, code4, code7, code7b
     )
 
 {-|
@@ -23,6 +23,13 @@ type WorkType
     = AllAtOnce
     | ReductionsBudget Int
 
+currentBudget : Scheduler -> Int
+currentBudget sch =
+    case sch.workType of
+        ReductionsBudget budget ->
+            budget
+        AllAtOnce ->
+            0
 
 type alias Scheduler =
     { procs : Dict Pid Proc
@@ -146,6 +153,33 @@ ex3Child =
                 \() ->
                     End
 
+ex4 : Program
+ex4 =
+    Work 5         <| \() ->
+    Spawn ex4Child <| \childPid ->
+    Work 5         <| \() ->
+    End
+
+ex4Child : Program
+ex4Child =
+    Work 999 <| \() ->
+    Work 10  <| \() ->
+    End
+
+code4 : String
+code4 = 
+    """
+    ex4 =
+        Work 5
+        Spawn ex4Child
+        Work 5
+        End
+
+    ex4Child =
+        Work 999
+        Work 10
+        End
+    """
 
 ex7 : Program
 ex7 =

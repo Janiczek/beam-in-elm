@@ -2,12 +2,12 @@ module Demo7 exposing (main)
 
 import Browser
 import Browser.Dom
-import Html exposing (..)
-import Html.Attributes exposing (..)
-import Html.Events exposing (onClick)
+import Html exposing (Html)
+import Html.Attributes
+import Html.Events
 import List.NonEmpty.Zipper as Zipper exposing (Zipper)
-import Scheduler exposing (Scheduler, Step(..), WorkType(..))
-import Shared exposing (ProcessState(..), SchedulerViewMode(..))
+import Scheduler exposing (Scheduler)
+import Shared
 
 
 type alias Model =
@@ -43,7 +43,7 @@ initWithBudgetAndProgram budget { fixed } =
         initialScheduler : Scheduler
         initialScheduler =
             Scheduler.init
-                { workType = ReductionsBudget budget
+                { workType = Scheduler.ReductionsBudget budget
                 , program =
                     if fixed then
                         Scheduler.ex7b
@@ -113,18 +113,11 @@ view model =
 
         additionalControls : List (Html Msg)
         additionalControls =
-            [ button
-                [ onClick FixBug
-                , style "padding" "8px 16px"
+            [ Html.button
+                [ Html.Events.onClick FixBug
+                , Html.Attributes.style "padding" "8px 16px"
                 ]
-                [ text "Fix the bug" ]
-            ]
-
-        additionalInfo : List (Html Msg)
-        additionalInfo =
-            [ div
-                [ style "color" "#666" ]
-                [ text (Shared.workTypeToString currentScheduler.workType) ]
+                [ Html.text "Fix the bug" ]
             ]
     in
     Shared.viewDemoLayout
@@ -141,7 +134,6 @@ view model =
             else
                 Scheduler.code7
         , additionalControls = additionalControls
-        , additionalInfo = additionalInfo
         , budgetControls =
             Just
                 { resetWithBudget = ResetWithBudget

@@ -69,7 +69,6 @@ view model =
         , schedulerMode = Shared.SimpleProgram
         , codeExample = Scheduler.code2
         , additionalControls = []
-        , additionalInfo = []
         , budgetControls = Nothing
         }
 

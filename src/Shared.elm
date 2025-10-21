@@ -437,25 +437,28 @@ viewReadyQueue readyQueue =
     div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
         [ h3 [] [ text "Ready Queue" ]
         , div [ style "background" "#f5f5f5", style "padding" "10px", style "border-radius" "4px" ]
-            [ ul [ style "list-style-type" "none"
-            , style "padding" "0"
-            , style "text-align" "center" ]
+            [ ul
+                [ style "list-style-type" "none"
+                , style "padding" "0"
+                , style "text-align" "center"
+                ]
                 (if List.isEmpty queueItems then
                     [ li [] [ text "Empty" ] ]
 
                  else
-                 queueItems
-                 |> List.indexedMap
-                    (\i item ->
-                        let
-                            displayText =
-                                if i == 0 then
-                                    "➡️ PID " ++ item ++ " ⬅️"
-                                else
-                                    "PID " ++ item
-                        in
-                        li [] [ text displayText ]
-                    )
+                    queueItems
+                        |> List.indexedMap
+                            (\i item ->
+                                let
+                                    displayText =
+                                        if i == 0 then
+                                            "➡️ PID " ++ item ++ " ⬅️"
+
+                                        else
+                                            "PID " ++ item
+                                in
+                                li [] [ text displayText ]
+                            )
                 )
             ]
         ]
@@ -630,9 +633,12 @@ viewDemoLayout :
     , schedulerMode : SchedulerViewMode
     , codeExample : String
     , additionalControls : List (Html msg)
-    , additionalInfo : List (Html msg)
-    , budgetControls : Maybe { resetWithBudget : Int -> msg
-    , updateBudget : String -> msg, budgetField : String }
+    , budgetControls :
+        Maybe
+            { resetWithBudget : Int -> msg
+            , updateBudget : String -> msg
+            , budgetField : String
+            }
     }
     -> Html msg
 viewDemoLayout config =
@@ -724,6 +730,11 @@ viewDemoLayout config =
                                             , style "padding" "8px 16px"
                                             ]
                                             [ text "Reset with budget" ]
+                                        , span
+                                            [ style "color" "#666"
+                                            , style "font-size" "14px"
+                                            ]
+                                            [ text ("Current budget: " ++ String.fromInt (Scheduler.currentBudget currentScheduler)) ]
                                         ]
                                     ]
 
@@ -735,7 +746,6 @@ viewDemoLayout config =
                     [ style "color" "#666" ]
                     [ text ("Step " ++ String.fromInt stepNumber) ]
                  ]
-                    ++ config.additionalInfo
                 )
             , viewScheduler config.schedulerMode currentScheduler config.codeExample
             ]
@@ -749,4 +759,4 @@ workTypeToString workType =
             ""
 
         Scheduler.ReductionsBudget budget ->
-            "Used budget: " ++ String.fromInt budget
+            "Current budget: " ++ String.fromInt budget

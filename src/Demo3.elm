@@ -69,7 +69,6 @@ view model =
         , schedulerMode = Shared.ProcessTable
         , codeExample = Scheduler.code3
         , additionalControls = []
-        , additionalInfo = []
         , budgetControls = Nothing
         }
 
