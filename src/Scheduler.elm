@@ -1,8 +1,8 @@
 module Scheduler exposing
     ( Scheduler, Step(..), Program(..), Proc, Pid, WorkType(..)
     , init, step, currentBudget
-    , ex1, ex2, ex3, ex4, ex7, ex7b
-    , code1, code2, code3, code4, code7, code7b
+    , ex1, ex2, ex3, ex4, ex5, ex7, ex7b
+    , code1, code2, code3, code4, code5, code7, code7b
     )
 
 {-|
@@ -177,6 +177,29 @@ code4 =
 
     ex4Child =
         Work 999
+        Work 10
+        End
+    """
+ex5 : Program
+ex5 =
+    Spawn ex5Child       <| \childPid ->
+    Send childPid "Ping" <| \() ->
+    End
+
+ex5Child : Program
+ex5Child =
+    Work 10 <| \() ->
+    End
+
+code5 : String
+code5 =
+    """
+    ex5 =
+        childPid = Spawn ex5Child
+        Send childPid "Ping"
+        End
+
+    ex5Child =
         Work 10
         End
     """
