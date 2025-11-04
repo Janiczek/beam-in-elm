@@ -203,24 +203,27 @@ stepToString step =
 viewProcesses : Scheduler -> Html msg
 viewProcesses scheduler =
     div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
-        [ h3 [] [ text "Processes" ]
-        , table
-            [ style "border-collapse" "collapse"
-            , style "font-family" "monospace"
-            , style "font-size" "14px"
-            , style "width" "fit-content"
-            ]
-            [ thead []
-                [ tr []
-                    [ th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "5ch" ] [ text "PID" ]
-                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "20ch" ] [ text "State" ]
-                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "40ch" ] [ text "Program" ]
-                    ]
+        [ h3 [ style "margin-bottom" "0" ] [ text "Processes" ]
+        , div [ style "min-height" "calc(38px * 3)" ]
+            [ table
+                [ style "border-collapse" "collapse"
+                , style "font-family" "'JetBrains Mono', monospace"
+                , style "font-size" "14px"
+                , style "table-layout" "fixed"
+                , style "width" "100%"
                 ]
-            , tbody []
-                (Dict.toList scheduler.procs
-                    |> List.map (viewProcessRow scheduler)
-                )
+                [ thead []
+                    [ tr []
+                        [ th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "5ch" ] [ text "PID" ]
+                        , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "25ch" ] [ text "State" ]
+                        , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5" ] [ text "Program" ]
+                        ]
+                    ]
+                , tbody []
+                    (Dict.toList scheduler.procs
+                        |> List.map (viewProcessRow scheduler)
+                    )
+                ]
             ]
         ]
 
@@ -228,25 +231,28 @@ viewProcesses scheduler =
 viewProcessesWithMailbox : Scheduler -> Html msg
 viewProcessesWithMailbox scheduler =
     div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
-        [ h3 [] [ text "Processes" ]
-        , table
-            [ style "border-collapse" "collapse"
-            , style "font-family" "monospace"
-            , style "font-size" "14px"
-            , style "width" "fit-content"
-            ]
-            [ thead []
-                [ tr []
-                    [ th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "5ch" ] [ text "PID" ]
-                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "20ch" ] [ text "State" ]
-                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "20ch" ] [ text "Mailbox" ]
-                    , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "40ch" ] [ text "Program" ]
-                    ]
+        [ h3 [ style "margin-bottom" "0" ] [ text "Processes" ]
+        , div [ style "min-height" "calc(38px * 3)" ]
+            [ table
+                [ style "border-collapse" "collapse"
+                , style "font-family" "'JetBrains Mono', monospace"
+                , style "font-size" "14px"
+                , style "table-layout" "fixed"
+                , style "width" "100%"
                 ]
-            , tbody []
-                (Dict.toList scheduler.procs
-                    |> List.map (viewProcessRowWithMailbox scheduler)
-                )
+                [ thead []
+                    [ tr []
+                        [ th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "5ch" ] [ text "PID" ]
+                        , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "25ch" ] [ text "State" ]
+                        , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5", style "width" "20ch" ] [ text "Mailbox" ]
+                        , th [ style "padding" "8px", style "text-align" "left", style "border-bottom" "2px solid #ddd", style "background" "#f5f5f5" ] [ text "Program" ]
+                        ]
+                    ]
+                , tbody []
+                    (Dict.toList scheduler.procs
+                        |> List.map (viewProcessRowWithMailbox scheduler)
+                    )
+                ]
             ]
         ]
 
@@ -276,6 +282,7 @@ viewProcessRow scheduler ( pid, proc ) =
         , td
             [ style "padding" "8px"
             , style "background" stateColor
+            , style "white-space" "nowrap"
             ]
             [ text stateText ]
         , td
@@ -311,6 +318,7 @@ viewProcessRowWithMailbox scheduler ( pid, proc ) =
         , td
             [ style "padding" "8px"
             , style "background" stateColor
+            , style "white-space" "nowrap"
             ]
             [ text stateText ]
         , td
@@ -370,12 +378,13 @@ viewProgram scheduler =
         , style "flex-direction" "column"
         , style "gap" "10px"
         ]
-        [ h3 [] [ text "Program" ]
+        [ h3 [ style "margin-bottom" "0" ] [ text "Program" ]
         , div
             [ style "background" stateColor
             , style "padding" "10px"
             , style "border-radius" "4px"
-            , style "font-family" "'JetBrains Mono'"
+            , style "font-family" "monospace"
+            , style "font-size" "14px"
             ]
             [ div
                 [ style "font-weight" "bold" ]
@@ -427,9 +436,9 @@ viewReadyQueue readyQueue =
         queueItems =
             Queue.toList readyQueue |> List.map String.fromInt
     in
-    div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px" ]
-        [ h3 [] [ text "Ready Queue" ]
-        , div [ style "background" "#f5f5f5", style "padding" "10px", style "border-radius" "4px" ]
+    div [ style "display" "flex", style "flex-direction" "column", style "gap" "10px", style "width" "fit-content" ]
+        [ h3 [ style "margin-bottom" "0" ] [ text "Ready Queue" ]
+        , div [ style "background" "#f5f5f5", style "padding" "10px", style "border-radius" "4px", style "min-height" "4.5em" ]
             [ ul
                 [ style "list-style-type" "none"
                 , style "padding" "0"
@@ -463,54 +472,92 @@ viewScheduler mode scheduler code =
         SimpleProgram ->
             div
                 [ style "display" "flex"
-                , style "flex-direction" "column"
                 , style "gap" "20px"
+                , style "align-items" "stretch"
+                , style "flex" "1"
+                , style "min-height" "0"
                 ]
                 [ div
-                    [ style "display" "flex"
-                    , style "gap" "20px"
-                    , style "align-items" "start"
+                    [ style "flex-shrink" "0"
                     ]
-                    [ viewCodeExample code
-                    , viewProgram scheduler
+                    [ viewCodeExample code ]
+                , div
+                    [ style "flex" "1"
+                    , style "min-width" "0"
                     ]
-                , viewTraces (List.reverse scheduler.revTraces)
+                    [ viewProgram scheduler ]
+                , div
+                    [ style "width" "25vw"
+                    , style "min-width" "35ch"
+                    , style "flex-shrink" "0"
+                    , style "display" "flex"
+                    , style "flex-direction" "column"
+                    ]
+                    [ viewTraces (List.reverse scheduler.revTraces) ]
                 ]
 
         ProcessTable ->
             div
                 [ style "display" "flex"
-                , style "flex-direction" "column"
                 , style "gap" "20px"
+                , style "align-items" "stretch"
+                , style "flex" "1"
+                , style "min-height" "0"
                 ]
                 [ div
                     [ style "display" "flex"
+                    , style "flex-direction" "column"
                     , style "gap" "20px"
-                    , style "align-items" "start"
+                    , style "flex-shrink" "0"
                     ]
                     [ viewCodeExample code
-                    , viewProcesses scheduler
                     , viewReadyQueue scheduler.readyQueue
                     ]
-                , viewTraces (List.reverse scheduler.revTraces)
+                , div
+                    [ style "flex-shrink" "1"
+                    , style "min-width" "0"
+                    ]
+                    [ viewProcesses scheduler ]
+                , div
+                    [ style "width" "25vw"
+                    , style "min-width" "35ch"
+                    , style "flex-shrink" "0"
+                    , style "display" "flex"
+                    , style "flex-direction" "column"
+                    ]
+                    [ viewTraces (List.reverse scheduler.revTraces) ]
                 ]
 
         ProcessTableWithMailbox ->
             div
                 [ style "display" "flex"
-                , style "flex-direction" "column"
                 , style "gap" "20px"
+                , style "align-items" "stretch"
+                , style "flex" "1"
+                , style "min-height" "0"
                 ]
                 [ div
                     [ style "display" "flex"
+                    , style "flex-direction" "column"
                     , style "gap" "20px"
-                    , style "align-items" "start"
+                    , style "flex-shrink" "0"
                     ]
                     [ viewCodeExample code
-                    , viewProcessesWithMailbox scheduler
                     , viewReadyQueue scheduler.readyQueue
                     ]
-                , viewTraces (List.reverse scheduler.revTraces)
+                , div
+                    [ style "flex-shrink" "1"
+                    , style "min-width" "0"
+                    ]
+                    [ viewProcessesWithMailbox scheduler ]
+                , div
+                    [ style "width" "25vw"
+                    , style "min-width" "35ch"
+                    , style "flex-shrink" "0"
+                    , style "display" "flex"
+                    , style "flex-direction" "column"
+                    ]
+                    [ viewTraces (List.reverse scheduler.revTraces) ]
                 ]
 
 
@@ -520,15 +567,19 @@ viewTraces traces =
         [ style "display" "flex"
         , style "flex-direction" "column"
         , style "gap" "10px"
+        , style "flex" "1"
+        , style "min-height" "0"
         ]
-        [ h3 [] [ text "Execution Trace" ]
+        [ h3 [ style "margin-bottom" "0" ] [ text "Execution Trace" ]
         , div
             [ style "background" "#f9f9f9"
             , style "padding" "10px"
             , style "border-radius" "4px"
-            , style "height" "200px"
-            , style "max-height" "200px"
+            , style "flex" "1"
+            , style "min-height" "0"
             , style "overflow-y" "auto"
+            , style "font-family" "monospace"
+            , style "font-size" "14px"
             , id traceId
             ]
             (if List.isEmpty traces then
@@ -563,7 +614,7 @@ viewCodeExample codeString =
         , style "flex-direction" "column"
         , style "gap" "10px"
         ]
-        [ h3 [] [ text "Example" ]
+        [ h3 [ style "margin-bottom" "0" ] [ text "Example" ]
         , div
             [ style "background" "#f5f5f5"
             , style "padding" "15px"
@@ -660,12 +711,18 @@ viewDemoLayout config =
     div
         [ style "padding" "20px"
         , style "font-family" "'JetBrains Mono'"
+        , style "height" "100vh"
+        , style "display" "flex"
+        , style "flex-direction" "column"
+        , style "box-sizing" "border-box"
         ]
-        [ h1 [ style "font-size" "24px" ] [ text config.title ]
+        [ h1 [ style "font-size" "24px", style "font-family" "'JetBrains Mono', monospace" ] [ text config.title ]
         , div
             [ style "display" "flex"
             , style "flex-direction" "column"
             , style "gap" "20px"
+            , style "flex" "1"
+            , style "min-height" "0"
             ]
             [ div
                 [ style "display" "flex"
@@ -682,17 +739,20 @@ viewDemoLayout config =
                         [ onClick config.stepBackward
                         , disabled (not canStepBackward)
                         , style "padding" "8px 16px"
+                        , style "font-family" "'JetBrains Mono', monospace"
                         ]
                         [ text "← Step Backward" ]
                      , button
                         [ onClick config.stepForward
                         , disabled (not canStepForward)
                         , style "padding" "8px 16px"
+                        , style "font-family" "'JetBrains Mono', monospace"
                         ]
                         [ text "Step Forward →" ]
                      , button
                         [ onClick config.reset
                         , style "padding" "8px 16px"
+                        , style "font-family" "'JetBrains Mono', monospace"
                         ]
                         [ text "Reset" ]
                      ]
@@ -704,13 +764,13 @@ viewDemoLayout config =
                                         , style "align-items" "center"
                                         , style "gap" "5px"
                                         ]
-                                        [ label [] [ text "Budget:" ]
+                                        [ label [ style "font-family" "'JetBrains Mono', monospace" ] [ text "Budget:" ]
                                         , input
                                             [ value budgetConfig.budgetField
                                             , onInput budgetConfig.updateBudget
                                             , style "width" "60px"
                                             , style "padding" "4px"
-                                            , style "font-family" "monospace"
+                                            , style "font-family" "'JetBrains Mono', monospace"
                                             , type_ "number"
                                             ]
                                             []
@@ -726,11 +786,13 @@ viewDemoLayout config =
                                                 Nothing ->
                                                     disabled True
                                             , style "padding" "8px 16px"
+                                            , style "font-family" "'JetBrains Mono', monospace"
                                             ]
                                             [ text "Reset with budget" ]
                                         , span
                                             [ style "color" "#666"
                                             , style "font-size" "14px"
+                                            , style "font-family" "'JetBrains Mono', monospace"
                                             ]
                                             [ text ("Current budget: " ++ String.fromInt (Scheduler.currentBudget currentScheduler)) ]
                                         ]
@@ -741,7 +803,10 @@ viewDemoLayout config =
                            )
                     )
                 , div
-                    [ style "color" "#666" ]
+                    [ style "color" "#666"
+                    , style "font-size" "14px"
+                    , style "font-family" "'JetBrains Mono', monospace"
+                    ]
                     [ text ("Step " ++ String.fromInt stepNumber) ]
                 ]
             , viewScheduler config.schedulerMode currentScheduler config.codeExample

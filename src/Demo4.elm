@@ -104,10 +104,7 @@ update msg model =
             )
 
         Reset ->
-            model.budget
-                |> String.toInt
-                |> Maybe.withDefault 1
-                |> initWithBudget
+            init ()
 
         UpdateBudget budgetStr ->
             ( { model | budget = budgetStr }, Cmd.none )
