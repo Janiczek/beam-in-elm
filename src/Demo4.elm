@@ -30,7 +30,22 @@ type Msg
 
 init : () -> ( Model, Cmd Msg )
 init () =
-    initWithBudget 8
+    let
+        workType : Scheduler.WorkType
+        workType =
+            Scheduler.AllAtOnce
+    in
+    ( { history =
+            Scheduler.init
+                { workType = workType
+                , program = Scheduler.ex4
+                }
+                |> Zipper.singleton
+      , budget = String.fromInt 8
+      , workType = workType
+      }
+    , Cmd.none
+    )
 
 
 initWithBudget : Int -> ( Model, Cmd Msg )
