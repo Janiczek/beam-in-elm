@@ -30,14 +30,15 @@ type Msg
 
 init : () -> ( Model, Cmd Msg )
 init () =
-    initWithAllAtOnce
+    initWithBudget 8
 
 
 initWithBudget : Int -> ( Model, Cmd Msg )
 initWithBudget budget =
     let
         workType : Scheduler.WorkType
-        workType = Scheduler.ReductionsBudget budget
+        workType =
+            Scheduler.ReductionsBudget budget
     in
     ( { history =
             Scheduler.init
@@ -52,20 +53,21 @@ initWithBudget budget =
     )
 
 
-initWithAllAtOnce : ( Model, Cmd Msg )
-initWithAllAtOnce =
+resetWithAllAtOnce : Model -> ( Model, Cmd Msg )
+resetWithAllAtOnce model =
     let
         workType : Scheduler.WorkType
-        workType = Scheduler.AllAtOnce
+        workType =
+            Scheduler.AllAtOnce
     in
-    ( { history =
+    ( { model
+        | history =
             Scheduler.init
                 { workType = workType
                 , program = Scheduler.ex4
                 }
                 |> Zipper.singleton
-      , budget = "1"
-      , workType = workType
+        , workType = workType
       }
     , Cmd.none
     )
@@ -99,7 +101,8 @@ update msg model =
             initWithBudget budgetInt
 
         SwitchToAllAtOnce ->
-            initWithAllAtOnce
+            model
+                |> resetWithAllAtOnce
 
         SwitchToReductionsBudget ->
             model.budget
@@ -128,20 +131,26 @@ view model =
                 , Html.button
                     [ Html.Events.onClick SwitchToAllAtOnce
                     , Html.Attributes.style "padding" "8px 16px"
-                    , Html.Attributes.style "background-color" 
+                    , Html.Attributes.style "background-color"
                         (case model.workType of
-                            Scheduler.AllAtOnce -> "greenyellow"
-                            _ -> ""
+                            Scheduler.AllAtOnce ->
+                                "greenyellow"
+
+                            _ ->
+                                ""
                         )
                     ]
                     [ Html.text "All At Once" ]
                 , Html.button
                     [ Html.Events.onClick SwitchToReductionsBudget
                     , Html.Attributes.style "padding" "8px 16px"
-                    , Html.Attributes.style "background-color" 
+                    , Html.Attributes.style "background-color"
                         (case model.workType of
-                            Scheduler.ReductionsBudget _ -> "greenyellow"
-                            _ -> ""
+                            Scheduler.ReductionsBudget _ ->
+                                "greenyellow"
+
+                            _ ->
+                                ""
                         )
                     ]
                     [ Html.text "Reductions Budget" ]
@@ -165,6 +174,7 @@ view model =
                         , updateBudget = UpdateBudget
                         , budgetField = model.budget
                         }
+
                 Scheduler.AllAtOnce ->
                     Nothing
         }

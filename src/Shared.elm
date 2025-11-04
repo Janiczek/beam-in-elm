@@ -346,12 +346,7 @@ viewProgram scheduler =
                     "No program"
 
                 proc :: _ ->
-                    case proc.program of
-                        Scheduler.End ->
-                            "End"
-
-                        _ ->
-                            "Shouldn't show at this point yet"
+                    programToText proc.program
 
         processState : ProcessState
         processState =
@@ -391,12 +386,8 @@ viewProgram scheduler =
             ]
         ]
 
-
-viewProgramText : Scheduler.Program -> Html msg
-viewProgramText program =
-    let
-        programText : String
-        programText =
+programToText : Scheduler.Program -> String
+programToText program =
             case program of
                 Scheduler.Work amount _ ->
                     "Work: " ++ String.fromInt amount
@@ -421,10 +412,12 @@ viewProgramText program =
 
                 Scheduler.SpawnLink _ _ ->
                     "SpawnLink"
-    in
+
+viewProgramText : Scheduler.Program -> Html msg
+viewProgramText program =
     div
         [ style "color" "#333" ]
-        [ text programText ]
+        [ text (programToText program) ]
 
 
 viewReadyQueue : Queue Pid -> Html msg
@@ -539,7 +532,12 @@ viewTraces traces =
             , id traceId
             ]
             (if List.isEmpty traces then
-                [ text "No steps yet" ]
+                [ div
+                    [ style "margin" "2px 0"
+                    , style "padding" "2px 0"
+                    ]
+                    [ text "No steps yet" ]
+                ]
 
              else
                 traces
@@ -674,7 +672,7 @@ viewDemoLayout config =
                 , style "flex-direction" "column"
                 , style "gap" "10px"
                 ]
-                ([ div
+                [ div
                     [ style "display" "flex"
                     , style "gap" "10px"
                     , style "align-items" "center"
@@ -742,11 +740,10 @@ viewDemoLayout config =
                                     []
                            )
                     )
-                 , div
+                , div
                     [ style "color" "#666" ]
                     [ text ("Step " ++ String.fromInt stepNumber) ]
-                 ]
-                )
+                ]
             , viewScheduler config.schedulerMode currentScheduler config.codeExample
             ]
         ]

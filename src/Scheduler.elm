@@ -1,8 +1,9 @@
 module Scheduler exposing
     ( Scheduler, Step(..), Program(..), Proc, Pid, WorkType(..)
-    , init, step, currentBudget
+    , init, step
     , ex1, ex2, ex3, ex4, ex5, ex6, ex7, ex7b
     , code1, code2, code3, code4, code5, code6, code7, code7b
+    , currentBudget
     )
 
 {-|
@@ -23,13 +24,16 @@ type WorkType
     = AllAtOnce
     | ReductionsBudget Int
 
+
 currentBudget : Scheduler -> Int
 currentBudget sch =
     case sch.workType of
         ReductionsBudget budget ->
             budget
+
         AllAtOnce ->
             0
+
 
 type alias Scheduler =
     { procs : Dict Pid Proc
@@ -153,21 +157,29 @@ ex3Child =
                 \() ->
                     End
 
+
 ex4 : Program
 ex4 =
-    Work 5         <| \() ->
-    Spawn ex4Child <| \childPid ->
-    Work 5         <| \() ->
-    End
+    Work 5 <|
+        \() ->
+            Spawn ex4Child <|
+                \childPid ->
+                    Work 5 <|
+                        \() ->
+                            End
+
 
 ex4Child : Program
 ex4Child =
-    Work 999 <| \() ->
-    Work 10  <| \() ->
-    End
+    Work 999 <|
+        \() ->
+            Work 10 <|
+                \() ->
+                    End
+
 
 code4 : String
-code4 = 
+code4 =
     """
     ex4 =
         Work 5
@@ -180,16 +192,23 @@ code4 =
         Work 10
         End
     """
+
+
 ex5 : Program
 ex5 =
-    Spawn ex5Child       <| \childPid ->
-    Send childPid "Ping" <| \() ->
-    End
+    Spawn ex5Child <|
+        \childPid ->
+            Send childPid "Ping" <|
+                \() ->
+                    End
+
 
 ex5Child : Program
 ex5Child =
-    Work 10 <| \() ->
-    End
+    Work 10 <|
+        \() ->
+            End
+
 
 code5 : String
 code5 =
@@ -204,20 +223,26 @@ code5 =
         End
     """
 
+
 ex6 : Program
 ex6 =
-    Spawn ex6Child <| \childPid ->
-    Send childPid "Ping" <| \() ->
-    End
+    Spawn ex6Child <|
+        \childPid ->
+            Send childPid "Ping" <|
+                \() ->
+                    End
+
 
 ex6Child : Program
 ex6Child =
     Receive
         ( "Ping"
         , \() ->
-            Work 10 <| \() ->
-            End
+            Work 10 <|
+                \() ->
+                    End
         )
+
 
 code6 : String
 code6 =
@@ -232,6 +257,7 @@ code6 =
             Work 10
             End
 """
+
 
 ex7 : Program
 ex7 =
