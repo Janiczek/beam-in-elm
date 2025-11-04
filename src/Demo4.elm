@@ -143,6 +143,7 @@ view model =
                 , Html.button
                     [ Html.Events.onClick SwitchToAllAtOnce
                     , Html.Attributes.style "padding" "8px 16px"
+                    , Html.Attributes.style "font-family" "'JetBrains Mono', monospace"
                     , Html.Attributes.style "background-color"
                         (case model.workType of
                             Scheduler.AllAtOnce ->
@@ -156,6 +157,7 @@ view model =
                 , Html.button
                     [ Html.Events.onClick SwitchToReductionsBudget
                     , Html.Attributes.style "padding" "8px 16px"
+                    , Html.Attributes.style "font-family" "'JetBrains Mono', monospace"
                     , Html.Attributes.style "background-color"
                         (case model.workType of
                             Scheduler.ReductionsBudget _ ->

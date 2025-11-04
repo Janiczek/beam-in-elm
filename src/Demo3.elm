@@ -95,6 +95,7 @@ view model =
             [ Html.button
                 [ Html.Events.onClick HintAtProblem
                 , Html.Attributes.style "padding" "8px 16px"
+                , Html.Attributes.style "font-family" "'JetBrains Mono', monospace"
                 ]
                 [ Html.text "Hint at problem" ]
             ]

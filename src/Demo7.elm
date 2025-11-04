@@ -107,12 +107,12 @@ update msg model =
 view : Model -> Html Msg
 view model =
     let
-
         additionalControls : List (Html Msg)
         additionalControls =
             [ Html.button
                 [ Html.Events.onClick FixBug
                 , Html.Attributes.style "padding" "8px 16px"
+                , Html.Attributes.style "font-family" "'JetBrains Mono', monospace"
                 ]
                 [ Html.text "Fix the bug" ]
             ]
