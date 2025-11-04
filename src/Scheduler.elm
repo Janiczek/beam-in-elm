@@ -277,7 +277,8 @@ code7 =
     ex7 =
         childPid = Spawn ex7Child
         Link childPid
-        Receive ("CRASH: " ++ childPid) -> End
+        Receive ("CRASH: " ++ childPid) ->
+            End
 
     ex7Child = Crash
     """
@@ -303,7 +304,8 @@ code7b =
     """
     ex7b =
         childPid = SpawnLink ex7Child
-        Receive ("CRASH: " ++ childPid) -> End
+        Receive ("CRASH: " ++ childPid) ->
+            End
 
     ex7Child = Crash
     """
