@@ -436,8 +436,31 @@ stepInner pid proc workType sch =
 
                     continueWith : Proc -> Program -> Int -> Scheduler -> Scheduler
                     continueWith newProc newProgram newBudget sch_ =
-                        sch_
-                            |> stepInner pid (newProc |> setProcProgram newProgram) (ReductionsBudget newBudget)
+                        let
+                            updatedProc =
+                                newProc |> setProcProgram newProgram
+                            
+                            wasEnqueueable =
+                                shouldEnqueue proc
+                            
+                            isEnqueueable =
+                                shouldEnqueue updatedProc
+                            
+                            -- If transitioning from enqueueable to non-enqueueable:
+                            -- - If budget > 0: continue processing immediately (will process Crash/End)
+                            -- - If budget <= 0: enqueue once for the next step
+                            shouldEnqueueOnce =
+                                wasEnqueueable && not isEnqueueable && newBudget <= 0
+                        in
+                        if shouldEnqueueOnce then
+                            -- Update the proc and enqueue it for the next step
+                            sch_
+                                |> setProc pid updatedProc
+                                |> enqueue pid
+                        else
+                            -- Normal case: continue processing (will process Crash/End if budget > 0)
+                            sch_
+                                |> stepInner pid updatedProc (ReductionsBudget newBudget)
                 in
                 stepInnerWithBudget pid proc budget sch stop continueWith
 
@@ -456,9 +479,23 @@ stepInner pid proc workType sch =
 
                 continueWith : Proc -> Program -> Int -> Scheduler -> Scheduler
                 continueWith newProc newProgram _ sch_ =
+                    let
+                        updatedProc =
+                            newProc |> setProcProgram newProgram
+                        
+                        wasEnqueueable =
+                            shouldEnqueue proc
+                        
+                        isEnqueueable =
+                            shouldEnqueue updatedProc
+                        
+                        -- If transitioning from enqueueable to non-enqueueable, enqueue once
+                        shouldEnqueueOnce =
+                            wasEnqueueable && not isEnqueueable
+                    in
                     sch_
-                        |> setProc pid (newProc |> setProcProgram newProgram)
-                        |> (if shouldEnqueue (newProc |> setProcProgram newProgram) then
+                        |> setProc pid updatedProc
+                        |> (if isEnqueueable || shouldEnqueueOnce then
                                 enqueue pid
 
                             else
@@ -570,7 +607,14 @@ stepInnerWithBudget pid proc budget sch stop continueWith =
                      else
                         Crash
                     )
-                    (budget - 1)
+                    (if wasSuccessful then
+                        budget - 1
+
+                     else
+                        -- When link fails and we transition to Crash, don't consume budget
+                        -- so we can process Crash immediately
+                        budget
+                    )
 
         SpawnLink childProgram kpid ->
             let
@@ -676,7 +720,14 @@ stepInnerAllAtOnce pid proc sch stop continueWith =
                     else
                         log [ DidUnsuccessfullyTryToLink { worker = pid, linked = linkedPid } ]
                    )
-                |> continueWith newProc (k ()) 0
+                |> continueWith newProc
+                    (if wasSuccessful then
+                        k ()
+
+                     else
+                        Crash
+                    )
+                    0
 
         SpawnLink childProgram kpid ->
             let
